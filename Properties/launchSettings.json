@@ -1,0 +1,9 @@
+{
+  "profiles": {
+    "CompareTickerSymbolListsInCSVFiles": {
+      "commandName": "Project",
+      "commandLineArgs": " --masterList --NoteColWidth=200 --GotoRow=8 --HistoryDays=5",
+      "workingDirectory": "C:\\Users\\shein\\Downloads"
+    }
+  }
+}
