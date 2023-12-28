@@ -89,6 +89,7 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
     static Regex patNoteColumnWidthSwitch = new Regex(@"--Note(Col(umn)?Width)?=([0-9]+)");
     static Regex patMaxEventAge = new Regex(@"--MaxEvent(Days?)?Age?=([0-9]+)");
     static Regex patOrderBySwitch = new Regex(@"--OrderBy=([a-zA-Z0-9_%]+)");
+    static Regex patColorBySwitch = new Regex(@"--ColorBy=([a-zA-Z0-9_%]+)");
     static Regex patMaxHistory = new Regex(@"--MaxHistory=([0-9]+)");
     static Regex patMaxNotesDaysOld = new Regex(@"--MaxNotesDaysOld=([0-9]+(\.[0-9]+))");
     static Regex patBackHistoryDayCount = new Regex(@"--BackHistoryDays?(Count)?=([0-9]+)");
@@ -162,10 +163,10 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
         var debug = false;
         var daysOfHistory = 5;
         var columnCurrent = 0;
-        var argsAndDownloadFiles = GetFileNamesAndSwitchesFromArgs(args);
+        args = GetFileNamesAndSwitchesFromArgs(args);
         var verticalSplitter = false;
         var excelStyles = new AutoInitSortedDictionary<string/* Hexadecimal color name */, ExcelStyle>();
-        var orderBys = new List<string>();
+        var workSheets = new List<(string orderBy ,string colorCodedAttributeName)>();
         // emacs solve([0 * m + b = 120, 1 * m + b = 235], [m, b])==[m = 115, b = 120]
         //var stockExcelHueAgeStyle = new ExcelStyleHueRange { Saturation = 240f, Luminance = 240f, HueMin = 120.0 / 360.0 * 255.0, HueMax = 235 / 360.0 * 255.0, InputMetricMin = 0, InputMetricMax = 1, HueScale = 115.0, HueOffset = 120 };
         main.stockExcelSaturationAgeStyle = new ExcelStyleSaturationRange { Hue = 120.0 / 360.0 * 255.0, Luminance = 240f, SaturationMin = 120.0 / 360.0 * 255.0, SaturationMax = 355.0 / 360.0 * 255.0, InputMetricMin = 0, InputMetricMax = 1, SaturationScale = 115.0, SaturationOffset = 120 };
@@ -183,14 +184,15 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
         // this is never used
         //foreach((var position, (var name, var numeric)) in mapPositionToAttributeName)  mapAttributeNameToPosition.Add(name, position);
 
-        foreach (string arg in argsAndDownloadFiles/*args*/)
+        var idxArgs = 0;
+        while (idxArgs<args.Length)
         {
-            var matchHistory = patHistory.Match(arg);
-            if (arg == "--debug")
+            var matchHistory = patHistory.Match(args[idxArgs]);
+            if (args[idxArgs] == "--debug")
             {
                 debug = true;
             }
-            else if (arg == "--help")
+            else if (args[idxArgs] == "--help")
             {
                 WriteLine("Help: TBD");
             }
@@ -198,56 +200,58 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
             {
                 daysOfHistory = Int32.Parse(matchHistory.Groups[1].Value);
             }
-            else if (arg == "--CSV")
-            {
-                generateCSV = true;
-                generateXML = false;
-            }
-            else if (arg == "--Reverse")
+            else if (args[idxArgs] == "--Reverse")
             {
                 DescendingComparer<string>.reverse = true;
                 verticalSplitter = true;
             }
-            else if (arg == "--VerticalSplitter")
+            else if (args[idxArgs] == "--VerticalSplitter")
                 verticalSplitter = true;
-            else if (MatchSwitchWithValue(patOrderBySwitch, arg, out string orderByTemp, 1))
+            else if (MatchSwitchWithValue(patOrderBySwitch, args[idxArgs], out string orderByTemp, 1))
             {
-                orderBys.Add(orderByTemp.Replace('_', ' '));
+                var colorCodedAttributeName = "";
+                if(idxArgs+1<args.Length && MatchSwitchWithValue(patColorBySwitch, args[idxArgs+1], out string colorByTemp, 1))
+                {
+                    colorCodedAttributeName = colorByTemp;
+                    idxArgs++;
+                }
+                workSheets.Add((orderBy: orderByTemp.Replace('_', ' '), colorCodedAttributeName: colorCodedAttributeName.Replace('_', ' ')));
                 SymbolColumnWidth = "55";
             }
-            else if (arg == "--noWildCards")
+            else if (args[idxArgs] == "--noWildCards")
             {
                 // skip, already handled
             }
-            else if (arg == "--masterList")
+            else if (args[idxArgs]  == "--masterList")
             {
                 generateMasterRegexList = true;
                 patSkipFiles.AddRange(patSkipFilesMaterList);
                 generateXML = false;
                 generateCSV = false;
             }
-            else if (MatchSwitchWithValue(patNoteColumnWidthSwitch, arg, out string width, 3))
+            else if (MatchSwitchWithValue(patNoteColumnWidthSwitch, args[idxArgs], out string width, 3))
             {
                 NoteColumnWidth = width;
             }
-            else if (MatchSwitchWithValue(patMaxEventAge, arg, out string tmpMaxEventAge, 2))
+            else if (MatchSwitchWithValue(patMaxEventAge, args[idxArgs], out string tmpMaxEventAge, 2))
             {
                 maxEventAge = int.Parse(tmpMaxEventAge);
             }
-            else if (MatchSwitchWithValue(patGotoRow, arg, out string row))
+            else if (MatchSwitchWithValue(patGotoRow, args[idxArgs], out string row))
             {
                 initialRow = row;
             }
-            else if (MatchSwitchWithValue(patMaxNotesDaysOld, arg, out string daysOld))
+            else if (MatchSwitchWithValue(patMaxNotesDaysOld, args[idxArgs], out string daysOld))
             {
                 maxNotesDaysOld = double.Parse(daysOld);
             }
-            else if (MatchSwitchWithValue(patBackHistoryDayCount, arg, out string tmpBackHistoryDayCount, 2))
+            else if (MatchSwitchWithValue(patBackHistoryDayCount, args[idxArgs], out string tmpBackHistoryDayCount, 2))
             {
                 backHistoryDayCount = Int32.Parse(tmpBackHistoryDayCount);
             }
             else
-                main.LoadCSVDataFiles(backHistoryDayCount, maxEventAge, generateMasterRegexList, mapFileNameToColumnPosition, mapSymbolToFileNameToDates, mapFileNameToMostRecentFileDate, mapMostRecentDateToFile, ref columnCurrent, emptyDefaultValues, ref history, ref historyDates, fileNamesWithHistory, arg);
+                main.LoadCSVDataFiles(backHistoryDayCount, maxEventAge, generateMasterRegexList, mapFileNameToColumnPosition, mapSymbolToFileNameToDates, mapFileNameToMostRecentFileDate, mapMostRecentDateToFile, ref columnCurrent, emptyDefaultValues, ref history, ref historyDates, fileNamesWithHistory, args[idxArgs]);
+            idxArgs++;
         }
 
         var masterSymbolListForWorksheet = main.MakeMasterSymbolListForWorksheet(mapFileNameToMostRecentFileDate, debug);
@@ -264,28 +268,25 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
         mapFileNameToFileNameNoExt = MakeMapFileNameToFileNameNoExt(fileNames);
         var finalExcelOutputFilePath = ExpandEnvironmentVariables(@$"%USERPROFILE%\Downloads\CompareMarketSmithLists_{DateTime.Now.ToString("yyyy-MMM-dd-ddd-HH")}.{(generateCSV || generateMasterRegexList ? "csv" : "xml")}");
         var saveColumnCurrent = columnCurrent;
-        foreach (var orderBy in orderBys)
+        foreach (var workSheet in workSheets)
         {
             var sbXMLWorksheetRows = new StringBuilder();
             var xmlColumnWidths = new List<string> { """<Column ss:Width="15" />""" }; // why does the width have no affect?
-            int columnCount = GenerateXMLWorksheetColumnDeclarations(generateCSV, generateXML, mapFileNameToColumnPosition, sbXMLWorksheetRows, sbCSV, xmlColumnWidths, fileNames);
+            int columnCount = GenerateXMLWorksheetColumnDeclarations(mapFileNameToColumnPosition, sbXMLWorksheetRows, sbCSV, xmlColumnWidths, fileNames);
             var historyDirectoryDateArray = historyDates.ToArray<DateTime>().Reverse<DateTime>().ToArray<DateTime>(); // why do I have to reverse this since it was created with a descending comparitor?
             var rowCount = 0;
             columnCurrent = saveColumnCurrent;
-            main.GenerateXMLWorksheetDataRows(backHistoryDayCount, generateCSV, generateXML, main.mapFileNameToSymbolToDatesToAttributes, masterSymbolListForWorksheet, mapFileNameToColumnPosition, mapFileNameToFileNameNoExt, mapSymbolToFileNameToDates, sbXMLWorksheetRows, sbCSV, debug, ref rowCount, ref columnCurrent, excelStyles, fileNamesWithHistory, columnCount, historyDirectoryDateArray, mapAttributeNameToScreenTip, orderBy);
-            if (generateXML)
-            {
-                var columnHeaders = $"""<Cell ss:StyleID="s62"><Data ss:Type="String">Order</Data><NamedCell ss:Name="_FilterDatabase"/></Cell>"""
-                    + $"""{string.Join("", (fileNames.OrderBy(fn => mapFileNameToColumnPosition[fn])).Select(fn => $"""<Cell ss:StyleID="s62"><Data ss:Type="String">{patAddSpaceNotesSwitch.Replace(mapFileNameToFileNameNoExt[fn], m => $"{m.Groups[1].Value} {m.Groups[2].Value}")}</Data><NamedCell ss:Name="_FilterDatabase"/></Cell>"""))} """
-                    + "";
-                columnHeaders += $"""{string.Join("", (mapPositionToAttributeName.Select(positionNamePair => $"""<Cell ss:StyleID="s62"><Data ss:Type="String">{positionNamePair.Value.displayName}</Data><NamedCell ss:Name="_FilterDatabase"/></Cell>""")))}""";
-                columnCount += mapPositionToAttributeName.Count;
-                rowCount++;
-                columnCount++; // include the extra column for the current row
-                workSheetXML.Add(ComposeWorkSheet(initialRow, sbXMLWorksheetRows, workSheetName + orderBy.Trim(), rowCount, xmlColumnWidths, verticalSplitter, columnCount, columnHeaders));
-            }
+            main.GenerateXMLWorksheetDataRows(backHistoryDayCount, main.mapFileNameToSymbolToDatesToAttributes, masterSymbolListForWorksheet, mapFileNameToColumnPosition, mapFileNameToFileNameNoExt, mapSymbolToFileNameToDates, sbXMLWorksheetRows, sbCSV, debug, ref rowCount, ref columnCurrent, excelStyles, fileNamesWithHistory, columnCount, historyDirectoryDateArray, mapAttributeNameToScreenTip, workSheet);
+            var columnHeaders = $"""<Cell ss:StyleID="s62"><Data ss:Type="String">Order</Data><NamedCell ss:Name="_FilterDatabase"/></Cell>"""
+                + $"""{string.Join("", (fileNames.OrderBy(fn => mapFileNameToColumnPosition[fn])).Select(fn => $"""<Cell ss:StyleID="s62"><Data ss:Type="String">{patAddSpaceNotesSwitch.Replace(mapFileNameToFileNameNoExt[fn], m => $"{m.Groups[1].Value} {m.Groups[2].Value}")}</Data><NamedCell ss:Name="_FilterDatabase"/></Cell>"""))} """
+                + "";
+            columnHeaders += $"""{string.Join("", (mapPositionToAttributeName.Select(positionNamePair => $"""<Cell ss:StyleID="s62"><Data ss:Type="String">{positionNamePair.Value.displayName}</Data><NamedCell ss:Name="_FilterDatabase"/></Cell>""")))}""";
+            columnCount += mapPositionToAttributeName.Count;
+            rowCount++;
+            columnCount++; // include the extra column for the current row
+            workSheetXML.Add(ComposeWorkSheet(initialRow, sbXMLWorksheetRows, workSheetName + workSheet.orderBy.Trim()+(string.IsNullOrEmpty(workSheet.colorCodedAttributeName)?"":"-ColorBy"+workSheet.colorCodedAttributeName), rowCount, xmlColumnWidths, verticalSplitter, columnCount, columnHeaders));
         }
-        if (generateXML)
+        if (!generateMasterRegexList)
         {
             foreach ((var _, var v) in excelStyles) stStyles += (string.IsNullOrEmpty(stStyles) ? "" : "\n    ") + v;
             var workBookXML = $"""
@@ -371,8 +372,8 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
              </Styles>
 
              """ +
-             string.Join("", workSheetXML) +
-             """"
+         string.Join("", workSheetXML) +
+         """"
             </Workbook>            
             """";
 
@@ -388,7 +389,7 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
             }
             //WriteLine($"files processed={string.Join(",\n", mapFileNameToColumnPosition.Keys.Select(f=>$"@\"{f}\"").ToList())}");
             var excel = ExpandEnvironmentVariables(@"%MSOFFICE%\EXCEL.EXE");
-            System.Diagnostics.Process.Start(excel, $"/s \"{finalExcelOutputFilePath}\"");
+            Process.Start(excel, $"/s \"{finalExcelOutputFilePath}\"");
         }
     }
 
@@ -607,16 +608,14 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
         //WriteLine($"attribute={attributeName} tip={screenTip}");
         return screenTip;
     }
-    void GenerateXMLWorksheetDataRows(int BACK_HISTORY_COUNT, bool generateCSV, bool generateXML, AutoMultiDimSortedDictionary<string, AutoMultiDimSortedDictionary<string, AutoMultiDimSortedDictionary<DateTime, AutoInitSortedDictionary<string, string>>>> mapFileNameToSymbolToDatesToAttributes, SortedDictionary<string, SymbolInList> comparisonGrid, SortedDictionary<string, int> mapFileNameToColumnPosition, SortedDictionary<string, string> mapFileNameToFileNameNoExt, AutoMultiDimSortedDictionary<string, AutoInitSortedDictionary<string, SortedSet<DateTime>>> mapSymbolToFileNameToDates, StringBuilder sbXMLWorksheetRows, StringBuilder sbCSV, bool debug, ref int rowCount, ref int columnCurrent, AutoInitSortedDictionary<string, ExcelStyle> excelStyles, SortedSet<string> fileNamesWithHistory, int columnCount, DateTime[] historyDirectoryDateArray, Dictionary<string, (bool tip, string displayName, Func<string, string> convert)> mapAttributeNameToScreenTip, string orderBy)
+    void GenerateXMLWorksheetDataRows(int BACK_HISTORY_COUNT, AutoMultiDimSortedDictionary<string, AutoMultiDimSortedDictionary<string, AutoMultiDimSortedDictionary<DateTime, AutoInitSortedDictionary<string, string>>>> mapFileNameToSymbolToDatesToAttributes, SortedDictionary<string, SymbolInList> comparisonGrid, SortedDictionary<string, int> mapFileNameToColumnPosition, SortedDictionary<string, string> mapFileNameToFileNameNoExt, AutoMultiDimSortedDictionary<string, AutoInitSortedDictionary<string, SortedSet<DateTime>>> mapSymbolToFileNameToDates, StringBuilder sbXMLWorksheetRows, StringBuilder sbCSV, bool debug, ref int rowCount, ref int columnCurrent, AutoInitSortedDictionary<string, ExcelStyle> excelStyles, SortedSet<string> fileNamesWithHistory, int columnCount, DateTime[] historyDirectoryDateArray, Dictionary<string, (bool tip, string displayName, Func<string, string> convert)> mapAttributeNameToScreenTip, (string orderBy, string colorCodedAttributeName) workSheet)
     {
         foreach (var symbol in comparisonGrid.Keys.Where(s => !string.IsNullOrEmpty(s)))
         {
             columnCurrent = 0;
-            if (generateXML)
-            {
-                sbXMLWorksheetRows.AppendLine("""  <Row ss:AutoFitHeight="0">""");
-                sbXMLWorksheetRows.AppendLine($"""    <Cell><Data ss:Type="Number">{rowCount + 1}</Data><NamedCell ss:Name="_FilterDatabase"/></Cell>""");
-            }
+
+            sbXMLWorksheetRows.AppendLine("""  <Row ss:AutoFitHeight="0">""");
+            sbXMLWorksheetRows.AppendLine($"""    <Cell><Data ss:Type="Number">{rowCount + 1}</Data><NamedCell ss:Name="_FilterDatabase"/></Cell>""");
             bool skipOverBlankColumn = false;
             AutoMultiDimSortedDictionary<string/*fileName*/, AutoMultiDimSortedDictionary<string/*symbol*/, AutoInitSortedDictionary<string, string>>> latestAttributes = new();
             var latestFileNameForThisSymbol = string.Empty;
@@ -630,37 +629,12 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
                 {
                     if (/*columnCurrent > 0 &&*/ columnCurrent < columnCount)
                     {
-                        if (generateCSV)
-                        {
-                            sbCSV.Append(",");
-                        }
-                        if (generateXML)
-                        {
-                            skipOverBlankColumn = true;
-                            //sbXMLRows.AppendLine($"""    <Cell><Data ss:Type="String"></Data><NamedCell ss:Name="_FilterDatabase"/></Cell><!-- col={columnCurrent} fn={fileName}-->""");
-                        }
+                        skipOverBlankColumn = true;
+                        //sbXMLRows.AppendLine($"""    <Cell><Data ss:Type="String"></Data><NamedCell ss:Name="_FilterDatabase"/></Cell><!-- col={columnCurrent} fn={fileName}-->""");
                     }
                     columnCurrent++;
                 }
-                if (generateCSV && columnCurrent > 0 && columnCurrent < columnCount) // @@bug@@
-                {
-                    if (generateCSV)
-                    {
-                        sbCSV.Append(",");
-                    }
-                    if (generateXML)
-                    {
-                        var skipToIndex = skipOverBlankColumn ? $" ss:Index=\"{columnCurrent + 2}\"" : "";
-                        skipOverBlankColumn = false;
-                        sbXMLWorksheetRows.AppendLine($"""    <Cell{skipToIndex}><Data ss:Type="String"></Data><NamedCell ss:Name="_FilterDatabase"/></Cell><!-- col={columnCurrent} fn={fileName}-->""");
-                    }
-                    columnCurrent++;
-                }
-                if (generateCSV)
-                {
-                    sbCSV.Append(symbol);
-                }
-                if (generateXML && columnCurrent >= 0 && columnCurrent < columnCount)
+                if (columnCurrent >= 0 && columnCurrent < columnCount)
                 {
                     var skipToIndex = skipOverBlankColumn ? $" ss:Index=\"{columnCurrent + 2}\"" : "";
                     skipOverBlankColumn = false;
@@ -761,56 +735,43 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
                         }
                         latestAttributes[symbol][fileName] = mapFileNameToSymbolToDatesToAttributes[fileName][symbol][latest];
                         var attributeTable = mapFileNameToSymbolToDatesToAttributes[fileName][symbol][latest];
-                        var attributes = string.Join(",", attributeTable
+                        var attributes2 = string.Join(",", attributeTable
                             .Where(e => !string.IsNullOrEmpty(e.Value) && e.Key != "seq" && isScreenTip(e.Key, mapAttributeNameToScreenTip))
                             .Select(e => mapAttributeNameToScreenTip.ContainsKey(e.Key) ? $"""{mapAttributeNameToScreenTip[e.Key].displayName}={patRemoveLeadingZeros.Replace(mapAttributeNameToScreenTip[e.Key].convert(e.Value), m => m.Groups[2].Value)}""" : $"""{e.Key}={e.Value}"""));
-                        attributes = $"age={age}," + attributes;
-                        if (attributes.Length > 255)
-                            attributes = attributes.Substring(0, 255);
-                        var styleName = "s68";
+                        attributes2 = $"age={age}," + attributes2;
+                        if (attributes2.Length > 255)
+                            attributes2 = attributes2.Substring(0, 255);
+                        var styleName2 = "s68";
                         if (age != 0 && fileNamesWithHistory.Contains(fileName))
                         {
                             var metric = 1.0 * age / (BACK_HISTORY_COUNT + 1);
                             metric = Math.Log(metric * (BACK_HISTORY_COUNT + 1)) / Math.Log(BACK_HISTORY_COUNT + 1);
-                            if (string.IsNullOrEmpty(attributeTable["50-Day Avg $ Vol (1000s)"]))
-                            {
-                                //WriteLine($"File name = {fileName} {symbol} missing dollar vol");
-                                stockExcelSaturationAgeStyle.Hue = 290.0 / 360.0 * 255.0;
-                            }
+                            if(workSheet.colorCodedAttributeName == "Ind Group Rank")
+                                ColorCodeBy_Ind_Group_Rank(attributeTable);
+                            else if (workSheet.colorCodedAttributeName == "Comp Rating")
+                                ColorCodeBy_Comp_Rating(attributeTable);
                             else
-                            {
-                                var dollarVol = double.Parse(attributeTable["50-Day Avg $ Vol (1000s)"].Replace(",", "")) * 1000;
-                                if (dollarVol > 20e6)
-                                    stockExcelSaturationAgeStyle.Hue = 120.0 / 360.0 * 255.0;
-                                else if (dollarVol > 15e6)
-                                    stockExcelSaturationAgeStyle.Hue = 90.0 / 360.0 * 255.0;
-                                else if (dollarVol > 10e6)
-                                    stockExcelSaturationAgeStyle.Hue = 60.0 / 360.0 * 255.0;
-                                else if (dollarVol > 5e6)
-                                    stockExcelSaturationAgeStyle.Hue = 30.0 / 360.0 * 255.0;
-                                else
-                                    stockExcelSaturationAgeStyle.Hue = 0.0 / 360.0 * 255.0;
-                            }                            
+                                ColorCodeBy_Dollar_Volume(attributeTable);
                             stockExcelSaturationAgeStyle.InputMetric = metric;
                             var RGBHexColor = stockExcelSaturationAgeStyle.ColorHexRGB;
                             var style = new ExcelStyle { Color = RGBHexColor, Name = "s" + RGBHexColor };
                             excelStyles[RGBHexColor] = style;
-                            styleName = "s" + RGBHexColor;
+                            styleName2 = "s" + RGBHexColor;
                             if (debug1) WriteLine($"f={fileName} symbol={symbol} age={age} metric={metric}");
                         }
                         var seqNoAndSymbol = "";
                         if (fileName.Contains("IBD 50 Index"))
                             seqNoAndSymbol = $"{mapFileNameToSymbolToDatesToAttributes[fileName][symbol][latest]["seq"]} {symbol}";
-                        else if (string.IsNullOrEmpty(orderBy) || orderBy.ToLower() == "symbol")
+                        else if (string.IsNullOrEmpty(workSheet.orderBy) || workSheet.orderBy.ToLower() == "symbol")
                             seqNoAndSymbol = symbol;
-                        else if (orderBy == "age")
+                        else if (workSheet.orderBy == "age")
                             seqNoAndSymbol = $"{age.ToString("000")} {symbol}";
                         else
                         {
-                            var attrValue = mapFileNameToSymbolToDatesToAttributes[fileName][symbol][latest][orderBy];
-                            if (!string.IsNullOrEmpty(attrValue) && mapAttributeNametoAttributeAttributes.ContainsKey(orderBy) && mapAttributeNametoAttributeAttributes[orderBy].numeric && mapAttributeNametoAttributeAttributes[orderBy].orderByConvert != null)
+                            var attrValue = mapFileNameToSymbolToDatesToAttributes[fileName][symbol][latest][workSheet.orderBy];
+                            if (!string.IsNullOrEmpty(attrValue) && mapAttributeNametoAttributeAttributes.ContainsKey(workSheet.orderBy) && mapAttributeNametoAttributeAttributes[workSheet.orderBy].numeric && mapAttributeNametoAttributeAttributes[workSheet.orderBy].orderByConvert != null)
                             {
-                                attrValue = mapAttributeNametoAttributeAttributes[orderBy].orderByConvert(attrValue);
+                                attrValue = mapAttributeNametoAttributeAttributes[workSheet.orderBy].orderByConvert(attrValue);
                                 seqNoAndSymbol = $"{attrValue} {symbol}";
                             }
                             else if (Int32.TryParse(attrValue ?? "999", out int attr1))
@@ -822,7 +783,7 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
                         }
                         //if (orderBy == "age" && symbol == "SPXC" && fileName == "RS Line Blue Dot.csv")  WriteLine($"symbol={symbol} age={age} seqNoAndSymbol={seqNoAndSymbol} attributes={attributes}");
 
-                        sbXMLWorksheetRows.AppendLine($"""    <Cell{skipToIndex} ss:StyleID="{styleName}" ss:HRef="https://marketsmith.investors.com/mstool?Symbol={symbol}&amp;Periodicity=Daily&amp;InstrumentType=Stock&amp;Source=sitemarketcondition&amp;AlertSubId=8241925&amp;ListId=0&amp;ParentId=0" x:HRefScreenTip="{attributes}"><Data ss:Type="String">{seqNoAndSymbol}</Data><NamedCell ss:Name="_FilterDatabase"/></Cell><!-- col={columnCurrent} fn={fileName}--> """);
+                        sbXMLWorksheetRows.AppendLine($"""    <Cell{skipToIndex} ss:StyleID="{styleName2}" ss:HRef="https://marketsmith.investors.com/mstool?Symbol={symbol}&amp;Periodicity=Daily&amp;InstrumentType=Stock&amp;Source=sitemarketcondition&amp;AlertSubId=8241925&amp;ListId=0&amp;ParentId=0" x:HRefScreenTip="{attributes2}"><Data ss:Type="String">{seqNoAndSymbol}</Data><NamedCell ss:Name="_FilterDatabase"/></Cell><!-- col={columnCurrent} fn={fileName}--> """);
                     }
                 }
                 columnCurrent++;
@@ -831,49 +792,102 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
             /**/
 
             rowCount++;
-            if (generateXML)
+            var styleName = "s68";
+            columnCurrent = mapFileNameToFileNameNoExt.Keys.Count;
+            var metricCells = ""; skipOverBlankColumn = true;
+            var attributes = new AutoInitSortedDictionary<string, string>();
+            var pFiles = latestAttributes[symbol].Keys.Intersect(preferredFiles);
+            string bestFile = latestFileNameForThisSymbol;
+            if (pFiles.Count() > 0)
+                bestFile = pFiles.FirstOrDefault();
+            attributes = latestAttributes[symbol][bestFile];
+            if (debug) WriteLine($"Fetching latestAttributes for {symbol} from {bestFile}");
+            foreach ((var position, (var attributeName, var numeric, var screenTip, var displayName, var convert, _)) in mapPositionToAttributeName)//foreach ((var key, var val) in latestAttributes[symbol])
             {
-                var styleName = "s68";
-                columnCurrent = mapFileNameToFileNameNoExt.Keys.Count;
-                var metricCells = ""; skipOverBlankColumn = true;
-                var attributes = new AutoInitSortedDictionary<string, string>();
-                var pFiles = latestAttributes[symbol].Keys.Intersect(preferredFiles);
-                string bestFile = latestFileNameForThisSymbol;
-                if (pFiles.Count() > 0)
-                    bestFile = pFiles.FirstOrDefault();
-                attributes = latestAttributes[symbol][bestFile];
-                if (debug) WriteLine($"Fetching latestAttributes for {symbol} from {bestFile}");
-                foreach ((var position, (var attributeName, var numeric, var screenTip, var displayName, var convert, _)) in mapPositionToAttributeName)//foreach ((var key, var val) in latestAttributes[symbol])
+                var skipToIndex = skipOverBlankColumn ? $" ss:Index=\"{columnCurrent + 2}\"" : "";
+                var type = numeric ? "Number" : "String";
+                var value = convert(attributes[attributeName]);
+                if (!string.IsNullOrEmpty(value))
                 {
-                    var skipToIndex = skipOverBlankColumn ? $" ss:Index=\"{columnCurrent + 2}\"" : "";
-                    var type = numeric ? "Number" : "String";
-                    var value = convert(attributes[attributeName]);
-                    if (!string.IsNullOrEmpty(value))
-                    {
-                        value = patRemoveFinalM.Replace(value,
-                            m => m.Groups[1].Value
-                            );
-                        value = patRemoveLeadingZeros.Replace(value,
-                            m => m.Groups[2].Value
-                            );
-                    }
-                    metricCells += $"""    <Cell{skipToIndex} ss:StyleID="{styleName}"><Data ss:Type="{type}">{value}</Data><NamedCell ss:Name="_FilterDatabase"/></Cell>""";
-                    columnCurrent++;
-                    skipOverBlankColumn = false;
+                    value = patRemoveFinalM.Replace(value, m => m.Groups[1].Value);
+                    value = patRemoveLeadingZeros.Replace(value, m => m.Groups[2].Value);
                 }
-                sbXMLWorksheetRows.AppendLine(metricCells);
-                sbXMLWorksheetRows.AppendLine($"  </Row> <!-- {rowCount} -->");
+                metricCells += $"""    <Cell{skipToIndex} ss:StyleID="{styleName}"><Data ss:Type="{type}">{value}</Data><NamedCell ss:Name="_FilterDatabase"/></Cell>""";
+                columnCurrent++;
+                skipOverBlankColumn = false;
             }
-            if (generateCSV)
-            {
-                sbCSV.AppendLine();
-            }
-            if (generateXML)
-            {
-                sbXMLWorksheetRows.AppendLine();
-            }
+            sbXMLWorksheetRows.AppendLine(metricCells);
+            sbXMLWorksheetRows.AppendLine($"  </Row> <!-- {rowCount} -->");
+            sbXMLWorksheetRows.AppendLine();
         }
     }
+
+    void ColorCodeBy_Dollar_Volume(AutoInitSortedDictionary<string, string> attributeTable)
+    {
+        var dollarVolume = attributeTable["50-Day Avg $ Vol (1000s)"];
+        if (string.IsNullOrEmpty(dollarVolume) || dollarVolume == "-")
+        {
+            //WriteLine($"File name = {fileName} {symbol} missing dollar vol");
+            stockExcelSaturationAgeStyle.Hue = 290.0 / 360.0 * 255.0;
+        }
+        else
+        {
+            var dollarVol = double.Parse(dollarVolume.Replace(",", "")) * 1000;
+            if (dollarVol > 20e6)
+                stockExcelSaturationAgeStyle.Hue = 120.0 / 360.0 * 255.0; // green
+            else if (dollarVol > 15e6)
+                stockExcelSaturationAgeStyle.Hue = 90.0 / 360.0 * 255.0;
+            else if (dollarVol > 10e6)
+                stockExcelSaturationAgeStyle.Hue = 60.0 / 360.0 * 255.0; // yellow
+            else if (dollarVol > 5e6)
+                stockExcelSaturationAgeStyle.Hue = 30.0 / 360.0 * 255.0;
+            else
+                stockExcelSaturationAgeStyle.Hue = 0.0 / 360.0 * 255.0; // red
+        }
+    }
+    void ColorCodeBy_Ind_Group_Rank(AutoInitSortedDictionary<string, string> attributeTable)
+    {
+        var indGroupRankString = attributeTable["Ind Group Rank"];
+        if (string.IsNullOrEmpty(indGroupRankString) || indGroupRankString == "-")
+        {
+            //WriteLine($"File name = {fileName} {symbol} missing dollar vol");
+            stockExcelSaturationAgeStyle.Hue = 290.0 / 360.0 * 255.0;
+        }
+        else
+        {
+            var indGroupRank = int.Parse(indGroupRankString.Trim());
+            if (indGroupRank < 40)
+                stockExcelSaturationAgeStyle.Hue = 120.0 / 360.0 * 255.0; // green
+            else if (indGroupRank < 80)
+                stockExcelSaturationAgeStyle.Hue = 90.0 / 360.0 * 255.0;
+            else if (indGroupRank < 120)
+                stockExcelSaturationAgeStyle.Hue = 60.0 / 360.0 * 255.0; // yellow
+            else if (indGroupRank < 160)
+                stockExcelSaturationAgeStyle.Hue = 30.0 / 360.0 * 255.0;
+            else
+                stockExcelSaturationAgeStyle.Hue = 0.0 / 360.0 * 255.0; // red
+        }
+    }
+
+    void ColorCodeBy_Comp_Rating(AutoInitSortedDictionary<string, string> attributeTable)
+    {
+        var compRatingString = attributeTable["Comp Rating"];
+        if (string.IsNullOrEmpty(compRatingString) || compRatingString == "-")
+        {
+            //WriteLine($"File name = {fileName} {symbol} missing dollar vol");
+            stockExcelSaturationAgeStyle.Hue = 290.0 / 360.0 * 255.0;
+        }
+        else
+        {
+            // 99->120/360*255==85
+            // 0->0
+            //
+            // 85/99==0.85859
+            var compRating = int.Parse(compRatingString.Trim());
+            stockExcelSaturationAgeStyle.Hue = compRating * 0.85859;
+        }
+    }
+
     static SortedDictionary<string, string> MakeMapFileNameToFileNameNoExt(string[] fileNames)
     {
         var mapFileNameToFileNameNoExt = new SortedDictionary<string, string>(); ;
@@ -886,38 +900,26 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
         }
         return mapFileNameToFileNameNoExt;
     }
-    static int GenerateXMLWorksheetColumnDeclarations(bool generateCSV, bool generateXML, SortedDictionary<string, int> mapFileNameToColumnPosition/*, SortedDictionary<string, string> mapFileNameToFileNameNoExt*/, StringBuilder sbXMLWorksheetRows, StringBuilder sbCSV, List<string> xmlColumnWidths, string[] fileNames)
+    static int GenerateXMLWorksheetColumnDeclarations(SortedDictionary<string, int> mapFileNameToColumnPosition/*, SortedDictionary<string, string> mapFileNameToFileNameNoExt*/, StringBuilder sbXMLWorksheetRows, StringBuilder sbCSV, List<string> xmlColumnWidths, string[] fileNames)
     {
         var columnCount = 0;
         foreach (var fileName in fileNames)
         {
-            if (columnCount > 0 && generateCSV)
-                sbCSV.Append(",");
             mapFileNameToColumnPosition[fileName] = columnCount++;
             var fileNameWithoutOptionalPrefix = patFileNameOrderPrefix.Match(fileName).Groups[3].Value;
             var match = patFileExtension.Match(fileNameWithoutOptionalPrefix);
             var fileNameWithOutExtension = match.Success ? match.Groups[1].Value : Path.GetFileName(fileName);
-            if (generateCSV)
+            var m = patNotes.Match(fileName);
+            if (m.Success)
             {
-                sbCSV.Append($"\"{fileNameWithOutExtension}\"");
+                xmlColumnWidths.Add($"""<Column ss:Width="{NoteColumnWidth}" />""");
             }
-            if (generateXML)
+            else
             {
-                var m = patNotes.Match(fileName);
-                if (m.Success)
-                {
-                    xmlColumnWidths.Add($"""<Column ss:Width="{NoteColumnWidth}" />""");
-                }
-                else
-                {
-                    xmlColumnWidths.Add($"""<Column ss:Width="{SymbolColumnWidth}" />""");
-                }
+                xmlColumnWidths.Add($"""<Column ss:Width="{SymbolColumnWidth}" />""");
             }
         }
-        if (generateCSV)
-            sbCSV.AppendLine();
-        else
-            sbXMLWorksheetRows.AppendLine();
+        sbXMLWorksheetRows.AppendLine();
         return columnCount;
     }
 
@@ -1026,7 +1028,8 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
         {21, new AttributeAttributes("Symbol"                  , false, false, "Symbol"            , e=>e, null) },
         {22, new AttributeAttributes("ROE"                     , true , true , "ROE"               , e=>e, FormatFloat) },
         {23, new AttributeAttributes("Up/Down Vol"             , true , true , "Up/Down Vol"       , e=>e, FormatFloat) },
-        {24, new AttributeAttributes("Yield"                   , true , true , "Yield"             , e=>e, FormatFloat) }
+        {24, new AttributeAttributes("Yield"                   , true , true , "Yield"             , e=>e, FormatFloat) },
+        {25, new AttributeAttributes("ETF"                     , false, false, "ETF"               , e=>e, e=>e) }
     };
     static string FormatDollarVolume(string e, string M ="")
     {
@@ -1070,7 +1073,8 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
         (new Regex("STRONG\\s*SELL"),"""<B><I><Font html:Size="15" html:Color="#FF0000">STRONG SELL</Font></I></B>"""),
         (new Regex("MODERATE"),"""<B><Font html:Size="14" html:Color="#00CCFF">MODERATE</Font></B>"""),
         (new Regex("MEDIUM"),"""<B><Font html:Size="14" html:Color="#00CCFF">MEDIUM</Font></B>"""),
-        (new Regex("HOLD"),"""<B><Font html:Size="14" html:Color="#00CCFF">HOLD</Font></B>""")
+        (new Regex("HOLD"),"""<B><Font html:Size="14" html:Color="#00CCFF">HOLD</Font></B>"""),
+        (new Regex(@"(Target Price:?|Price Target( Raised to)?:?|PRICE TARGET:|(Raising )?Fair Value Estimate( to)?:?|) (\$[0-9\.]+)"),"""<B><Font html:Size="14" html:Color="#00CCFF">$0</Font></B>""")
     };
     static AutoMultiDimSortedDictionary<string/*symbol*/, AutoMultiDimSortedDictionary<DateTime, AutoInitSortedDictionary<string/*metric name*/, string/*metric value*/>>> ParseCSV(
         string fileName,
@@ -1136,7 +1140,6 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
                                 if (pat.Match(note).Success)
                                 {
                                     note = pat.Replace(note, replace);
-                                    //break;
                                 }
                             }
                         notes = dateString + ": " + note;
@@ -1375,7 +1378,7 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
         return fileNames;
     }
 
-    static List<string> GetFileNamesAndSwitchesFromArgs(string[] args)
+    static string[] GetFileNamesAndSwitchesFromArgs(string[] args)
     {
         var fns = args.ToList();
         var noWildCards = false;
@@ -1386,7 +1389,7 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
         }
         if (!noWildCards)
             fns.AddRange(GetAllCsvFilesFromDownloadDirectory());
-        return fns;
+        return fns.ToArray();
     }
 
 }
