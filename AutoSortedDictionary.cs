@@ -51,6 +51,27 @@ namespace CompareTickerSymbolListsInCSVFiles
             }
         }
     }
+    public class AutoInitDoubleSortedDictionary<K> : System.Collections.Generic.SortedDictionary<K, double> where K : notnull
+    {
+        public new double this[K k]
+        {
+            get
+            {
+                if (base.Keys.Contains(k))
+                    return base[k];
+                else
+                {
+                    int v = 0;
+                    base.Add(k, v);
+                    return v;
+                }
+            }
+            set
+            {
+                base[k] = value;
+            }
+        }
+    }
     public class AutoMultiDimSortedDictionary<K, V> : System.Collections.Generic.SortedDictionary<K, V> where V : new() where K : notnull
     {
         public new V this[K k]
