@@ -177,6 +177,9 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
         var defaultValuesFileName = ExpandEnvironmentVariables(@"%DN%\MinDollarVol10MComp50.csv");
         main.defaultTodayValues = main.ParseCSV(defaultValuesFileName, ExtractDateTimeFromFilePath(defaultValuesFileName).Date, emptyDefaultValues, maxEventAge);
 
+        // Throw away these minimum and maximum values because they are not from the lists were are interested in.
+        main.doubleMin = new(); main.doubleMax = new();
+
         mapPositionToAttributeName.ToList().ForEach(e => mapAttributeNameToScreenTip.Add(e.Value.name, (e.Value.screenTip, e.Value.displayName, e.Value.convert)));
 
         IEnumerable<History> history = null;
@@ -751,7 +754,11 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
                             else if (workSheet.colorCodedAttributeName == "Comp Rating")
                                 ColorCodeBy_Comp_Rating(attributeTable);
                             else if (workSheet.colorCodedAttributeName == "Up/Down Vol")
-                                ColorCodeBy_UpDown_Rating(attributeTable); // leave off here
+                                ColorCodeBy_UpDown_Rating(attributeTable, "Up/Down Vol");
+                            else if (workSheet.colorCodedAttributeName == "ROE")
+                                ColorCodeBy_Metric(attributeTable, "ROE");
+                            else if (workSheet.colorCodedAttributeName == "Price % Chg")
+                                ColorCodeBy_Metric(attributeTable, "Price % Chg");
                             else
                                 ColorCodeBy_Dollar_Volume(attributeTable);
                             stockExcelSaturationAgeStyle.InputMetric = metric;
@@ -889,9 +896,9 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
             stockExcelSaturationAgeStyle.Hue = compRating * 0.85859;
         }
     }
-    void ColorCodeBy_UpDown_Rating(AutoInitSortedDictionary<string, string> attributeTable)
+    void ColorCodeBy_UpDown_Rating(AutoInitSortedDictionary<string, string> attributeTable, string metricName)
     {
-        var upDownVolStr = attributeTable["Up/Down Vol"];
+        var upDownVolStr = attributeTable[metricName];
         if (string.IsNullOrEmpty(upDownVolStr) || upDownVolStr == "-")
         {
             // Leave off here
@@ -900,15 +907,43 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
         else
         {
             var upDownVol = double.Parse(upDownVolStr.Trim());
-            var min = doubleMin["Up/Down Vol"];
-            var max = doubleMax["Up/Down Vol"];
-            if (mapAttributeNametoAttributeAttributes["Up/Down Vol"].max != double.MinValue)
+            var min = doubleMin[metricName];
+            var max = doubleMax[metricName];
+            if (mapAttributeNametoAttributeAttributes[metricName].max != double.MinValue)
             {
-                max=Math.Min(max, mapAttributeNametoAttributeAttributes["Up/Down Vol"].max);
+                max = Math.Min(max, mapAttributeNametoAttributeAttributes[metricName].max);
             }
             upDownVol = (upDownVol - min) / (max - min);
-            stockExcelSaturationAgeStyle.Hue = upDownVol * 120.0/360.0*255.0;
-            WriteLine($" upDownVol={upDownVolStr} => upDownVol={upDownVol} => stockExcelSaturationAgeStyle.Hue={stockExcelSaturationAgeStyle.Hue}");
+            stockExcelSaturationAgeStyle.Hue = upDownVol * 120.0 / 360.0 * 255.0;
+            // WriteLine($" upDownVol={upDownVolStr} => upDownVol={upDownVol} => stockExcelSaturationAgeStyle.Hue={stockExcelSaturationAgeStyle.Hue}");
+        }
+    }
+    void ColorCodeBy_Metric(AutoInitSortedDictionary<string, string> attributeTable, string metricName)
+    {
+        var roeStr = attributeTable[metricName];
+        if (string.IsNullOrEmpty(roeStr) || roeStr == "-")
+        {
+            // Leave off here
+            stockExcelSaturationAgeStyle.Hue = 290.0 / 360.0 * 255.0;
+        }
+        else
+        {
+            var roe = double.Parse(roeStr.Trim());
+            var min = doubleMin[metricName];
+            var max = doubleMax[metricName];
+            if (mapAttributeNametoAttributeAttributes[metricName].max != double.MinValue)
+            {
+                max = Math.Min(max, mapAttributeNametoAttributeAttributes[metricName].max);
+            }
+            if (mapAttributeNametoAttributeAttributes[metricName].min != double.MaxValue)
+            {
+                min = Math.Max(min, mapAttributeNametoAttributeAttributes[metricName].min);
+            }
+            roe = Math.Min(roe, max);
+            roe = Math.Max(roe, min);
+            roe = (roe - min) / (max - min);
+            stockExcelSaturationAgeStyle.Hue = roe * 180.0 / 360.0 * 255.0;
+            // WriteLine($" upDownVol={upDownVolStr} => upDownVol={upDownVol} => stockExcelSaturationAgeStyle.Hue={stockExcelSaturationAgeStyle.Hue}");
         }
     }
     static SortedDictionary<string, string> MakeMapFileNameToFileNameNoExt(string[] fileNames)
@@ -1029,7 +1064,7 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
     }
     static Dictionary<int, AttributeAttributes> mapPositionToAttributeName = new Dictionary<int, AttributeAttributes>{
         { 1, new AttributeAttributes("Current Price"           , true , true , "Price"             , e=>e, null) },
-        { 2, new AttributeAttributes("Price % Chg"             , true , true , "Price % Chg"       , e=>e, FormatFloat)},
+        { 2, new AttributeAttributes("Price % Chg"             , true , true , "Price % Chg"       , e=>e, FormatFloat, 10,-10)},
         { 3, new AttributeAttributes("Comp Rating"             , true , true , "Comp Rating"       , e=>e, FormatInteger) },
         { 4, new AttributeAttributes("EPS Rating"              , true , true , "EPS Rating"        , e=>e, null ) },
         { 5, new AttributeAttributes("RS Rating"               , true , true , "RS Rating"         , e=>e, FormatInteger) },
@@ -1049,7 +1084,7 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
         {19, new AttributeAttributes("EPS Due Date"            , false, false, "EPS Due Date"      , e=>e, null) },
         {20, new AttributeAttributes("Days to Earnings"        , true , false, "Days to Earnings"  , e=>e, null) },
         {21, new AttributeAttributes("Symbol"                  , false, false, "Symbol"            , e=>e, null) },
-        {22, new AttributeAttributes("ROE"                     , true , true , "ROE"               , e=>e, FormatFloat) },
+        {22, new AttributeAttributes("ROE"                     , true , true , "ROE"               , e=>e, FormatFloat, 100,-100) },
         {23, new AttributeAttributes("Up/Down Vol"             , true , true , "Up/Down Vol"       , e=>e, FormatFloat, 2) },
         {24, new AttributeAttributes("Yield"                   , true , true , "Yield"             , e=>e, FormatFloat) },
         {25, new AttributeAttributes("ETF"                     , false, false, "ETF"               , e=>e, e=>e) }
@@ -1230,7 +1265,7 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
                                                     if (!result.ContainsKey(key))
                                                     {
                                                         result.Add(key, val);
-                                                        SaveMinMaxDoubleValues(key, val);
+                                                        SaveMinMaxDoubleValues(key, val, symbol);
                                                     }
                                                 }
                                             }
@@ -1277,7 +1312,7 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
                                     {
                                         //result.Add(attrNameAndType.displayName, attrNameAndType.convert(attrValue)); // @@bug@@ is this superfluous?
                                         result.Add(attrNameAndType.name, attrValue);
-                                        SaveMinMaxDoubleValues(attrNameAndType.name, attrValue);
+                                        SaveMinMaxDoubleValues(attrNameAndType.name, attrValue, symbol);
                                         //WriteLine($" add key: \"{attrNameAndType.name}\" val: \"{attrValue}\" filename={fileName}");
                                         /*
                                         if (result.ContainsKey(attrNameAndType.name))
@@ -1359,13 +1394,14 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
         }
     }
 
-    void SaveMinMaxDoubleValues(string key, string val)
+    void SaveMinMaxDoubleValues(string key, string val, string symbol)
     {
         if(!string.IsNullOrEmpty(val) && val != "-" && mapAttributeNametoAttributeAttributes.ContainsKey(key) && mapAttributeNametoAttributeAttributes[key].numeric)
         {
             if (doubleMin.ContainsKey(key))
             {
                 var valDouble = double.Parse(val);
+                //if (valDouble > 50 && key == "Price % Chg") WriteLine($"symbol = {symbol} key={key} val={val}");
                 if (valDouble < doubleMin[key])
                     doubleMin[key] = valDouble;
             }
@@ -1376,6 +1412,7 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
             if (doubleMax.ContainsKey(key))
             {
                 var valDouble = double.Parse(val);
+                //if (valDouble > 50 && key == "Price % Chg")  WriteLine($"symbol = {symbol} key={key} val={val}");
                 if (valDouble > doubleMax[key])
                     doubleMax[key] = valDouble;
             }
