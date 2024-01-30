@@ -749,18 +749,20 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
                         {
                             var metric = 1.0 * age / (BACK_HISTORY_COUNT + 1);
                             metric = Math.Log(metric * (BACK_HISTORY_COUNT + 1)) / Math.Log(BACK_HISTORY_COUNT + 1);
-                            if(workSheet.colorCodedAttributeName == "Ind Group Rank")
+                            if (workSheet.colorCodedAttributeName == "Ind Group Rank")
                                 ColorCodeBy_Ind_Group_Rank(attributeTable);
                             else if (workSheet.colorCodedAttributeName == "Comp Rating")
                                 ColorCodeBy_Comp_Rating(attributeTable);
                             else if (workSheet.colorCodedAttributeName == "Up/Down Vol")
-                                ColorCodeBy_UpDown_Rating(attributeTable, "Up/Down Vol");
+                                ColorCodeBy_Metric(attributeTable, "Up/Down Vol");  //ColorCodeBy_UpDown_Rating(attributeTable, "Up/Down Vol");
                             else if (workSheet.colorCodedAttributeName == "ROE")
                                 ColorCodeBy_Metric(attributeTable, "ROE");
                             else if (workSheet.colorCodedAttributeName == "Price % Chg")
                                 ColorCodeBy_Metric(attributeTable, "Price % Chg");
-                            else
+                            else if (string.IsNullOrEmpty(workSheet.colorCodedAttributeName))
                                 ColorCodeBy_Dollar_Volume(attributeTable);
+                            else
+                                ColorCodeBy_Metric(attributeTable, workSheet.colorCodedAttributeName);
                             stockExcelSaturationAgeStyle.InputMetric = metric;
                             var RGBHexColor = stockExcelSaturationAgeStyle.ColorHexRGB;
                             var style = new ExcelStyle { Color = RGBHexColor, Name = "s" + RGBHexColor };
@@ -1076,10 +1078,10 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
         {11, new AttributeAttributes("Sector"                  , false, true , "Sector"            , e=>e, null) },
         {12, new AttributeAttributes("Name"                    , false, true , "Name"              , e=>e, null) },
         {13, new AttributeAttributes("Sponsor Rating"          , false, false, "Sponsor Rating"    , e=>e, null) },
-        {14, new AttributeAttributes("Funds % Increase"        , true , false, "Funds % Increase"  , e=>e, FormatFloat) },
-        {15, new AttributeAttributes("Number of Funds"         , true , false, "Number of Funds"   , e=>e, FormatInteger) },
-        {16, new AttributeAttributes("Funds %"                 , true , false, "Funds %"           , e=>e, FormatFloat) },
-        {17, new AttributeAttributes("% Off High"              , true , false, "%Off High"         , e=>e, FormatFloat) },
+        {14, new AttributeAttributes("Funds % Increase"        , true , false, "Funds % Increase"  , e=>e, FormatFloat, 20,0) },
+        {15, new AttributeAttributes("Number of Funds"         , true , false, "Number of Funds"   , e=>e, FormatInteger, 2000, 0) },
+        {16, new AttributeAttributes("Funds %"                 , true , false, "Funds %"           , e=>e, FormatFloat, 99, 0) },
+        {17, new AttributeAttributes("% Off High"              , true , false, "% Off High"         , e=>e, FormatFloat, 3, -20) },
         {18, new AttributeAttributes("Earnings Stability"      , true , false, "Earnings Stability", e=>e, FormatInteger) },
         {19, new AttributeAttributes("EPS Due Date"            , false, false, "EPS Due Date"      , e=>e, null) },
         {20, new AttributeAttributes("Days to Earnings"        , true , false, "Days to Earnings"  , e=>e, null) },
