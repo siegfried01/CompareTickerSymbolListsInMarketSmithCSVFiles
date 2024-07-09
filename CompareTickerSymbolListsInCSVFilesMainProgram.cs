@@ -1,21 +1,11 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Data.Common;
-using System.Diagnostics;
-using System.Drawing;
+﻿using System.Diagnostics;
 using System.Globalization;
-using System.IO;
-using System.Linq;
-using System.Net;
-using System.Runtime.Intrinsics.X86;
 using System.Text;
 using System.Text.RegularExpressions;
-using System.Xml.Linq;
 using CompareTickerSymbolListsInCSVFiles;
 using CsvHelper;
 using static System.Console;
 using static System.Environment;
-using static System.Net.WebRequestMethods;
 record AttributeAttributes(string name, bool numeric, bool screenTip, string displayName, Func<string, string> convert, Func<string, string>? orderByConvert, double max = double.MinValue, double min=double.MaxValue);
 class DescendingComparer<T> : IComparer<T> where T : IComparable<T>
 {
@@ -35,6 +25,10 @@ class History
 record DataFileCatagories(SortedSet<string> preferred, SortedSet<string> missingDataColums, SortedSet<string> donotknow);
 internal class CompareTickerSymbolListsInCSVFilesMainProgram
 {
+    public CompareTickerSymbolListsInCSVFilesMainProgram()
+    {
+
+    }
     static SortedSet<string> preferredFiles = new SortedSet<string>() {
          "Accelerating Leaders.csv",
          "Additions.csv",
@@ -44,6 +38,7 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
          "Extended Stocks.csv",
          "IBD Big Cap 20.csv",
          "IBD Live Hi Closing Range.csv",
+         "IBD Live Hi Weekly Closing Range.csv",
          "IBD Live Ready.csv",
          "IBD Live Watch.csv",
          "IBD 50 Index.csv",
@@ -59,11 +54,15 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
          "Merrill-Holdings.csv",
          "Mid Cap.csv",
          "MinDollarVol10MComp50.csv",
+         "Power from Pivot.csv",
          "RS Line 5% New High.csv",
          "RS Line Blue Dot.csv",
          "RS Line New High.csv",
          "Small Cap.csv",
          "ttt ML Holdings.csv",
+         //"Swadley Weeks Watch Uni.csv",
+         //"Swadley Watch Feb 26.csv",
+         "Top Rated Stocks.csv"
     };
 
     static string orderPrefix = "aaa|bbb|ccc|ddd|eee|fff|ggg|hhh|iii|jjj|kkk|lll|mmm|nnn|ooo|ppp|qqq|rrr|sss|ttt|uuu|vvv|www|xxx|yyy|zzz";
@@ -71,6 +70,7 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
     static Regex patFileExtension = new Regex("^([^\\.]+)\\.([^\\.]+)$");
     static Regex patGotoRow = new Regex("^--GotoRow=([0-9]+)$");
     //[GeneratedRegex(@"zzz([a-zA-Z0-9]*)Notes(\.csv)?$")]
+    static Regex patSymbol = new Regex(@$"({orderPrefix})([a-zA-Z0-9]*)\s*Symbol(\.csv)?$");
     static Regex patNotes = new Regex(@$"({orderPrefix})([a-zA-Z0-9]*)\s*Notes(\.csv)?$");
     static Regex patShares = new Regex(@$"({orderPrefix}) ?([- a-zA-Z0-9]*)\s*[sS]hares(\.csv)?$");
     static Regex patUnrealizedGains = new Regex(@$"({orderPrefix}) ?([- a-zA-Z0-9]*)\s*(Daily ?Change|IRR|Price|Shares|UnitCost|ProfitLoss(Dollar)?|NetLiquidValue|PortionOf(Total)?Account)(\.csv)?$");
@@ -86,19 +86,25 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
     static Regex patTickerSymbolColumnWidth = new Regex(@"--(Ticker)?Symbol(Col(umn)?Width)?=([0-9]+)");
     static Regex patRemoveFinalM = new Regex(@"^(.*)M$");
     static Regex patRemoveLeadingZeros = new Regex(@"^(0+)(.*)$");
+    static Regex patCheckStockFileLists = new Regex(@"--[Cc]heck(Stock(File(Lists)?)?)?");
     static string NoteColumnWidth = "400";
     static string SymbolColumnWidth = "37";//"32.75";
     static List<Regex> patSkipFiles = new List<Regex> {
         new Regex(@"^MinDollarVol10MComp50\.csv$"),
-        new Regex (@"^197 Industry Groups\.csv$"),
+        new Regex(@"^197 Industry Groups\.csv$"),
+        new Regex(@"^All_Accounts_GainLoss_Realized(_Details)?_[0-9]+-[0-9]+.csv"),// Schwab TOS download
+        new Regex(@"^Individual_[^_]+_Transactions_[0-9]+-[0-9]+.csv"),// Schwab web site download
         new Regex(@"Merrill-Holdings-Unrealized-Gain-Loss-Summary\.csv$"),
         new Regex(@"Merrill-Holdings\.csv$"),
         new Regex(@"^Merrill.*(Holdings?|All).*\.csv$"),
         new Regex(@"^ExportData.*\.csv$"),
         new Regex(@"PositionStatement\.csv$"),
         new Regex(@"^Realized Gain Loss.*\.csv$"),
-        new Regex(@"^UC_[0-9]+_[0-9]+\.csv$"),
+        new Regex(@"^UC_[0-9]+_[0-9]+\.csv$"), // Schwab TOS download
+        new Regex(@"^[0-9]+-[0-9]+-[0-9]+-PositionStatement\.csv$"), // Schwab TOS download
         new Regex(@"^SEP-IRA-Positions-\d+-\d+-\d+-\d+\.csv$"),
+        new Regex(@"^(197 Industry Groups|MarketSmith Growth 250)\.csv$"),
+        new Regex(@"^MarketSurge Growth 250\.csv$"),
         new Regex(@"^paper trading realized gain loss TOS \d+-\d+-\d+-AccountStatement\.csv$"),
         new Regex(@"^(Merril.*|SEP-IRA.*|paper trading.*|.*Ameritrade.*|197 Industry Groups|MinDollarVol[0-9]+MComp[0-9]+)\.csv$")};
     static List<Regex> patSkipFilesMaterList = new List<Regex> { new Regex(@"^zzz.*\.csv$") };
@@ -129,11 +135,12 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
     }
     static double maxNotesDaysOld = 40;
     static int maxNoteSize = 1000;
-    AutoMultiDimSortedDictionary<string/*symbol*/, AutoMultiDimSortedDictionary<DateTime, AutoInitSortedDictionary<string/*metric name*/, string/*metric value*/>>>?  defaultTodayValues =   null;
+    AutoMultiDimSortedDictionary<string/*symbol*/, AutoMultiDimSortedDictionary<DateTime, AutoInitSortedDictionary<string/*metric name*/, string/*metric value*/>>>? defaultTodayValues = null;
     AutoMultiDimSortedDictionary<string/*file name*/, AutoMultiDimSortedDictionary<string /*symbol*/, AutoMultiDimSortedDictionary<DateTime, AutoInitSortedDictionary<string/*metric name*/, string/*metric value*/>>>> mapFileNameToSymbolToDatesToAttributes = new();// new DescendingComparer<string>());
     ExcelStyleSaturationRange stockExcelSaturationAgeStyle;
     AutoInitDoubleSortedDictionary<string> doubleMin = new();
     AutoInitDoubleSortedDictionary<string> doubleMax = new();
+    public bool CheckStockFileLists {get; set; } = false;
     public static void Main(string[] args)
     {
         var main = new CompareTickerSymbolListsInCSVFilesMainProgram();
@@ -195,6 +202,10 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
             {
                 WriteLine("Help: TBD");
             }
+            else if (patCheckStockFileLists.Match(arg).Success)
+            {
+                main.CheckStockFileLists = true;
+            }
             else if (matchHistory.Success)
             {
                 daysOfHistory = Int32.Parse(matchHistory.Groups[1].Value);
@@ -254,21 +265,27 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
                 if (requiredFiles.Contains(fn))
                 {
                     requiredFiles.Remove(fn);
-                    if (!generateMasterRegexList)
-                        WriteLine($"found '{fn}' is a required file");
+                    if (!generateMasterRegexList && !main.CheckStockFileLists)
+                        WriteLine($"Found required file '{fn}'");
                 }
-                else
-                {
-                    if (!generateMasterRegexList)
-                        WriteLine($"found '{fn}' is not a required file");                }
-                main.LoadCSVDataFiles(backHistoryDayCount, maxEventAge, generateMasterRegexList, mapFileNameToColumnPosition, mapSymbolToFileNameToDates, mapFileNameToMostRecentFileDate, mapMostRecentDateToFile, ref columnCurrent, emptyDefaultValues, ref history, ref historyDates, fileNamesWithHistory, arg);
+                else if (!generateMasterRegexList && !main.CheckStockFileLists && !SkipFile(fn)) { 
+                    WriteLine($"Found extra file '{fn}'.");                
+                }
+                if(!main.CheckStockFileLists)
+                    main.LoadCSVDataFiles(backHistoryDayCount, maxEventAge, generateMasterRegexList, mapFileNameToColumnPosition, mapSymbolToFileNameToDates, mapFileNameToMostRecentFileDate, mapMostRecentDateToFile, ref columnCurrent, emptyDefaultValues, ref history, ref historyDates, fileNamesWithHistory, arg);
             }
             idxArgs++;
         }
 
         if (requiredFiles.Count > 0 && !generateMasterRegexList)
         {
-            WriteLine($"Required files not found: {string.Join(", ", requiredFiles)}"); 
+            WriteLine($"{requiredFiles.Count} Required files not found: {string.Join(", ", requiredFiles)}"); 
+            if(main.CheckStockFileLists)
+                return;
+        }
+        else if (main.CheckStockFileLists && !generateMasterRegexList)
+        {
+            WriteLine("All required files found");
             return;
         }
  
@@ -302,7 +319,9 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
             columnCount += mapPositionToAttributeName.Count;
             rowCount++;
             columnCount++; // include the extra column for the current row
-            workSheetXML.Add(ComposeWorkSheet(initialRow, sbXMLWorksheetRows, workSheetName + workSheet.orderBy.Trim()+(string.IsNullOrEmpty(workSheet.colorCodedAttributeName)?"":"-ColorBy"+workSheet.colorCodedAttributeName.Replace("/","")), rowCount, xmlColumnWidths, verticalSplitter, columnCount, columnHeaders));
+            string workSheetDisplayName = workSheetName + workSheet.orderBy.Trim() + (string.IsNullOrEmpty(workSheet.colorCodedAttributeName) ? "" : "-ColorBy" + workSheet.colorCodedAttributeName.Replace("/", ""));
+            var len = workSheetDisplayName.Length;
+            workSheetXML.Add(ComposeWorkSheet(initialRow, sbXMLWorksheetRows, workSheetDisplayName, rowCount, xmlColumnWidths, verticalSplitter, columnCount, columnHeaders));
         }
         if (!generateMasterRegexList)
         {
@@ -675,6 +694,10 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
                         var style = "";
                         if ("ProfitLoss" == name || "PortionOfTotalAccount" == name || name == "DailyChange" || name == "IRR")
                         {
+                            if(sharesOrProfitLossOrUnitCost.IndexOf("$") >= 0)
+                            {
+                                sharesOrProfitLossOrUnitCost=sharesOrProfitLossOrUnitCost = sharesOrProfitLossOrUnitCost.Replace("$", "");
+                            }
                             var val = +(double.Parse(sharesOrProfitLossOrUnitCost) / 100);
                             sharesOrProfitLossOrUnitCost = val.ToString();
                             if (val < -0.08)
@@ -692,7 +715,7 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
                         }
                         else if ("NetLiquidValue" == name || "Price" == name || "ProfitLossDollar" == name)
                         {
-                            var val = double.Parse(sharesOrProfitLossOrUnitCost);
+                            double val = ParseDouble(sharesOrProfitLossOrUnitCost,fileName);
                             if (val < 0)
                                 style = " ss:StyleID=\"s74\"";
                             else
@@ -761,25 +784,65 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
                         {
                             var metric = 1.0 * age / (BACK_HISTORY_COUNT + 1);
                             metric = Math.Log(metric * (BACK_HISTORY_COUNT + 1)) / Math.Log(BACK_HISTORY_COUNT + 1);
-                            if (workSheet.colorCodedAttributeName == "Ind Group Rank")
-                                ColorCodeBy_Ind_Group_Rank(attributeTable);
-                            else if (workSheet.colorCodedAttributeName == "Comp Rating")
-                                ColorCodeBy_Comp_Rating(attributeTable);
-                            else if (workSheet.colorCodedAttributeName == "Up/Down Vol")
-                                ColorCodeBy_Metric(attributeTable, "Up/Down Vol");  //ColorCodeBy_UpDown_Rating(attributeTable, "Up/Down Vol");
-                            else if (workSheet.colorCodedAttributeName == "ROE")
-                                ColorCodeBy_Metric(attributeTable, "ROE");
-                            else if (workSheet.colorCodedAttributeName == "Price % Chg")
-                                ColorCodeBy_Metric(attributeTable, "Price % Chg");
-                            else if (string.IsNullOrEmpty(workSheet.colorCodedAttributeName))
-                                ColorCodeBy_Dollar_Volume(attributeTable);
-                            else
-                                ColorCodeBy_Metric(attributeTable, workSheet.colorCodedAttributeName);
+                            if (workSheet.colorCodedAttributeName == "Ind Group Rank")            ColorCodeBy_Ind_Group_Rank(attributeTable);
+                            else if (workSheet.colorCodedAttributeName == "Comp Rating")          ColorCodeBy_Comp_Rating(attributeTable, "Comp Rating");
+                            else if (workSheet.colorCodedAttributeName == "RS Rating")            ColorCodeBy_Comp_Rating(attributeTable, "RS Rating");
+                            else if (workSheet.colorCodedAttributeName == "EPS Rating")           ColorCodeBy_Comp_Rating(attributeTable, "EPS Rating");
+                            else if (workSheet.colorCodedAttributeName == "Up/Down Vol")          ColorCodeBy_Metric(attributeTable, "Up/Down Vol");  //ColorCodeBy_UpDown_Rating(attributeTable, "Up/Down Vol");
+                            else if (workSheet.colorCodedAttributeName == "ROE")                  ColorCodeBy_Metric(attributeTable, "ROE");
+                            else if (workSheet.colorCodedAttributeName == "Price % Chg")          ColorCodeBy_Metric(attributeTable, "Price % Chg");
+                            else if (workSheet.colorCodedAttributeName == "Daily Closing Range")  ColorCodeBy_Metric(attributeTable, "Daily Closing Range");
+                            else if (workSheet.colorCodedAttributeName == "Weekly Closing Range") ColorCodeBy_Metric(attributeTable, "Weekly Closing Range");
+                            else if (string.IsNullOrEmpty(workSheet.colorCodedAttributeName))     ColorCodeBy_Dollar_Volume(attributeTable);
+                            else                                                                  ColorCodeBy_Metric(attributeTable, workSheet.colorCodedAttributeName);
                             stockExcelSaturationAgeStyle.InputMetric = metric;
-                            var RGBHexColor = stockExcelSaturationAgeStyle.ColorHexRGB;
-                            var style = new ExcelStyle { Color = RGBHexColor, Name = "s" + RGBHexColor };
-                            excelStyles[RGBHexColor] = style;
-                            styleName2 = "s" + RGBHexColor;
+                            var RGBHexColor = stockExcelSaturationAgeStyle.ColorHexRGB; // add pattern here for dollar volume
+                            ExcelStyle style;
+                            if(attributeTable.ContainsKey("50-Day Avg $ Vol (1000s)") && !string.IsNullOrEmpty(attributeTable["50-Day Avg $ Vol (1000s)"]))
+                            {
+                                double dv = 0;
+                                if (double.TryParse(attributeTable["50-Day Avg $ Vol (1000s)"].Replace(",", ""), out dv))
+                                {
+                                    dv = dv * 1000;
+                                }
+                                else 
+                                {
+                                    dv = 0;
+                                    //WriteLine($"Error: {fileName} {symbol} 50-Day Avg $ Vol (1000s)={attributeTable["50-Day Avg $ Vol (1000s)"]}");
+                                }
+                                if (dv < 10 * 1000 * 1000)
+                                {
+                                    var pattern = "ThinVertStripe";
+                                    style = new ExcelStyle { Color = RGBHexColor, Name = "s" + RGBHexColor + pattern, Pattern = pattern, PatternColor = "000000" };
+                                    excelStyles[RGBHexColor + pattern] = style;
+                                    styleName2 = "s" + RGBHexColor + pattern;
+                                    //style = new ExcelStyle { Color = RGBHexColor, Name = "s" + RGBHexColor };
+                                    //excelStyles[RGBHexColor] = style;
+                                    //styleName2 = "s" + RGBHexColor;
+                                }
+                                else if (dv < 20 * 1000 * 1000)
+                                {
+                                    var pattern = "ThinHorzStripe";
+                                    style = new ExcelStyle { Color = RGBHexColor, Name = "s" + RGBHexColor + pattern, Pattern = pattern, PatternColor = "000000" };
+                                    excelStyles[RGBHexColor + pattern] = style;
+                                    styleName2 = "s" + RGBHexColor + pattern;
+                                    //style = new ExcelStyle { Color = RGBHexColor, Name = "s" + RGBHexColor };
+                                    //excelStyles[RGBHexColor] = style;
+                                    //styleName2 = "s" + RGBHexColor;
+                                }
+                                else
+                                {
+                                    style = new ExcelStyle { Color = RGBHexColor, Name = "s" + RGBHexColor };
+                                    excelStyles[RGBHexColor] = style;
+                                    styleName2 = "s" + RGBHexColor;
+                                }
+                            }
+                            else
+                            {
+                                style = new ExcelStyle { Color = RGBHexColor, Name = "s" + RGBHexColor };
+                                excelStyles[RGBHexColor] = style;
+                                styleName2 = "s" + RGBHexColor;
+                            }
                             if (debug1) WriteLine($"f={fileName} symbol={symbol} age={age} metric={metric}");
                         }
                         var seqNoAndSymbol = "";
@@ -843,6 +906,19 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
             sbXMLWorksheetRows.AppendLine($"  </Row> <!-- {rowCount} -->");
             sbXMLWorksheetRows.AppendLine();
         }
+
+        static double ParseDouble(string sharesOrProfitLossOrUnitCost, string fileName)
+        {
+            try
+            {
+                return double.Parse(sharesOrProfitLossOrUnitCost);
+            }
+            catch (Exception ex)
+            {
+                WriteLine($"file = {fileName} exception: {ex}");
+                throw ex;
+            }
+        }
     }
 
     void ColorCodeBy_Dollar_Volume(AutoInitSortedDictionary<string, string> attributeTable)
@@ -892,9 +968,9 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
         }
     }
 
-    void ColorCodeBy_Comp_Rating(AutoInitSortedDictionary<string, string> attributeTable)
+    void ColorCodeBy_Comp_Rating(AutoInitSortedDictionary<string, string> attributeTable, string metric)
     {
-        var compRatingString = attributeTable["Comp Rating"];
+        var compRatingString = attributeTable[metric];
         if (string.IsNullOrEmpty(compRatingString) || compRatingString == "-")
         {
             //WriteLine($"File name = {fileName} {symbol} missing dollar vol");
@@ -1077,31 +1153,34 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
             return strValue;
     }
     static Dictionary<int, AttributeAttributes> mapPositionToAttributeName = new Dictionary<int, AttributeAttributes>{
-        { 1, new AttributeAttributes("Current Price"           , true , true , "Price"             , e=>e, null) },
-        { 2, new AttributeAttributes("Price % Chg"             , true , true , "Price % Chg"       , e=>e, FormatFloat, 10,-10)},
-        { 3, new AttributeAttributes("Comp Rating"             , true , true , "Comp Rating"       , e=>e, FormatInteger) },
-        { 4, new AttributeAttributes("EPS Rating"              , true , true , "EPS Rating"        , e=>e, null ) },
-        { 5, new AttributeAttributes("RS Rating"               , true , true , "RS Rating"         , e=>e, FormatInteger) },
-        { 6, new AttributeAttributes("A/D Rating"              , false, true , "A/D Rating"        , e=>e, null) },
-        { 7, new AttributeAttributes("SMR Rating"              , false, true , "SMR Rating"        , e=>e, null) },
-        { 8, new AttributeAttributes("50-Day Avg $ Vol (1000s)", true , true , "50-Day Avg $M Vol" , e=>FormatDollarVolume(e,"M"), e => FormatDollarVolume(e))},
-        { 9, new AttributeAttributes("Ind Group Rank"          , true , true , "Ind Group Rank"    , e=>e, FormatInteger) },
-        {10, new AttributeAttributes("Industry Name"           , false, true , "Industry Name"     , e=>e, null) },
-        {11, new AttributeAttributes("Sector"                  , false, true , "Sector"            , e=>e, null) },
-        {12, new AttributeAttributes("Name"                    , false, true , "Name"              , e=>e, null) },
-        {13, new AttributeAttributes("Sponsor Rating"          , false, false, "Sponsor Rating"    , e=>e, null) },
-        {14, new AttributeAttributes("Funds % Increase"        , true , false, "Funds % Increase"  , e=>e, FormatFloat, 10,0) },
-        {15, new AttributeAttributes("Number of Funds"         , true , false, "Number of Funds"   , e=>e, FormatInteger, 2000, 0) },
-        {16, new AttributeAttributes("Funds %"                 , true , false, "Funds %"           , e=>e, FormatFloat, 99, 0) },
-        {17, new AttributeAttributes("% Off High"              , true , false, "% Off High"         , e=>e, FormatFloat, 3, -20) },
-        {18, new AttributeAttributes("Earnings Stability"      , true , false, "Earnings Stability", e=>e, FormatInteger) },
-        {19, new AttributeAttributes("EPS Due Date"            , false, false, "EPS Due Date"      , e=>e, null) },
-        {20, new AttributeAttributes("Days to Earnings"        , true , false, "Days to Earnings"  , e=>e, null) },
-        {21, new AttributeAttributes("Symbol"                  , false, false, "Symbol"            , e=>e, null) },
-        {22, new AttributeAttributes("ROE"                     , true , true , "ROE"               , e=>e, FormatFloat, 100,-100) },
-        {23, new AttributeAttributes("Up/Down Vol"             , true , true , "Up/Down Vol"       , e=>e, FormatFloat, 2) },
-        {24, new AttributeAttributes("Yield"                   , true , true , "Yield"             , e=>e, FormatFloat) },
-        {25, new AttributeAttributes("ETF"                     , false, false, "ETF"               , e=>e, e=>e) }
+        { 1, new AttributeAttributes("Current Price"           , true , true , "Price"              , e=>e, null) },
+        { 2, new AttributeAttributes("Price % Chg"             , true , true , "Price % Chg"        , e=>e, FormatFloat, 10,-10)},
+        { 3, new AttributeAttributes("Comp Rating"             , true , true , "Comp Rating"        , e=>e, FormatInteger) },
+        { 4, new AttributeAttributes("EPS Rating"              , true , true , "EPS Rating"         , e=>e, null ) },
+        { 5, new AttributeAttributes("RS Rating"               , true , true , "RS Rating"          , e=>e, FormatInteger) },
+        { 6, new AttributeAttributes("A/D Rating"              , false, true , "A/D Rating"         , e=>e, null) },
+        { 7, new AttributeAttributes("SMR Rating"              , false, true , "SMR Rating"         , e=>e, null) },
+        { 8, new AttributeAttributes("50-Day Avg $ Vol (1000s)", true , true , "50-Day Avg $M Vol"  , e=>FormatDollarVolume(e,"M"), e => FormatDollarVolume(e))},
+        { 9, new AttributeAttributes("Ind Group Rank"          , true , true , "Ind Group Rank"     , e=>e, FormatInteger) },
+        {10, new AttributeAttributes("Industry Name"           , false, true , "Industry Name"      , e=>e, null) },
+        {11, new AttributeAttributes("Sector"                  , false, true , "Sector"             , e=>e, null) },
+        {12, new AttributeAttributes("Name"                    , false, true , "Name"               , e=>e, null) },
+        {13, new AttributeAttributes("Sponsor Rating"          , false, false, "Sponsor Rating"     , e=>e, null) },
+        {14, new AttributeAttributes("Funds % Increase"        , true , false, "Funds % Increase"   , e=>e, FormatFloat, 10,0) },
+        {15, new AttributeAttributes("Number of Funds"         , true , false, "Number of Funds"    , e=>e, FormatInteger, 2000, 0) },
+        {16, new AttributeAttributes("Funds %"                 , true , false, "Funds %"            , e=>e, FormatFloat, 99, 0) },
+        {17, new AttributeAttributes("Mgmt %"                  , true , false, "Mgmt %"             , e=>e, FormatFloat, 99, 0) },
+        {18, new AttributeAttributes("% Off High"              , true , false, "% Off High"         , e=>e, FormatFloat, 3, -20) },
+        {19, new AttributeAttributes("Earnings Stability"      , true , false, "Earnings Stability" , e=>e, FormatInteger) },
+        {20, new AttributeAttributes("EPS Due Date"            , false, false, "EPS Due Date"       , e=>e, null) },
+        {21, new AttributeAttributes("Days to Earnings"        , true , false, "Days to Earnings"   , e=>e, null) },
+        {22, new AttributeAttributes("Symbol"                  , false, false, "Symbol"             , e=>e, null) },
+        {23, new AttributeAttributes("ROE"                     , true , true , "ROE"                , e=>e, FormatFloat, 100,-100) },
+        {24, new AttributeAttributes("Up/Down Vol"             , true , true , "Up/Down Vol"        , e=>e, FormatFloat, 2) },
+        {25, new AttributeAttributes("Yield"                   , true , true , "Yield"              , e=>e, FormatFloat) },
+        {26, new AttributeAttributes("ETF"                     , false, false, "ETF"                , e=>e, e=>e) },
+        {27, new AttributeAttributes("Daily Closing Range"     , true , false, "Daily Closing Range", e=>e, FormatPercentFloat, 100, 0) },
+        {28, new AttributeAttributes("Weekly Closing Range"    , true , false, "Weekly Closing Range",e=>e, FormatPercentFloat, 100, 0) },
     };
     static string FormatDollarVolume(string e, string M ="")
     {
@@ -1120,6 +1199,23 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
             var val = double.Parse(e.Replace(",", ""));
             return val < 0 ? $"{val:000.00}" : $"{val:  000.00}"; 
         } 
+    }
+    static string FormatPercentFloat(string e)
+    {
+        if (string.IsNullOrEmpty(e) || e == "-")
+        {
+            return e;
+        }
+        else
+        {
+            var val = double.Parse(e.Replace(",", ""));
+            if (val == 100) val = 99.99; // conserve space and don't use three digits
+            var result = $"{val:00}";
+            if (result == "100")
+                result = "99";
+            //var result = val < 0 ? $"{val:00}" : $"{}";
+            return result;
+        }
     }
 
     static Dictionary<string, AttributeAttributes> MakeMapAttributeNametoAttributeAttributes(Dictionary<int, AttributeAttributes> mapPositionToAttributeName)
@@ -1145,7 +1241,9 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
         (new Regex("STRONG\\s*SELL"),"""<B><I><Font html:Size="15" html:Color="#FF0000">STRONG SELL</Font></I></B>"""),
         (new Regex("MODERATE"),"""<B><Font html:Size="14" html:Color="#00CCFF">MODERATE</Font></B>"""),
         (new Regex("MEDIUM"),"""<B><Font html:Size="14" html:Color="#00CCFF">MEDIUM</Font></B>"""),
-        (new Regex("HOLD"),"""<B><Font html:Size="14" html:Color="#00CCFF">HOLD</Font></B>"""),
+        (new Regex("HOLD"),"""<B><Font html:Size="14" html:Color="#00CCFF">HOLD</Font></B>"""),     
+        (new Regex(@"(PO):?"),"""<B><Font html:Size="14" html:Color="#00CCFF">PT:</Font></B>"""),
+        (new Regex(@"(FMV|Fair Value Estimate|PRICE TARGET|TARGET PRICE)(:)?",RegexOptions.IgnoreCase),"""<B><Font html:Size="14" html:Color="#00CCFF">PT$2</Font></B>"""),
         (new Regex(@"(Target Price:?|Price Target( Raised to)?:?|PRICE TARGET:|(Raising )?Fair Value Estimate( to)?:?|) (\$[0-9\.]+)"),"""<B><Font html:Size="14" html:Color="#00CCFF">$0</Font></B>""")
     };
     AutoMultiDimSortedDictionary<string/*symbol*/, AutoMultiDimSortedDictionary<DateTime, AutoInitSortedDictionary<string/*metric name*/, string/*metric value*/>>> ParseCSV(
@@ -1171,6 +1269,7 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
             //csv.Configuration.HasHeaderRecord = false;
 
             var isNotesFileName = patNotes.Match(fileName);
+            var isSymbolFileName = patSymbol.Match(fileName);
             var isUnrealizedGainName = patUnrealizedGains.Match(fileName);
             //WriteLine($"f={fileName} {isUnrealizedGainName}");
             var result = new AutoInitSortedDictionary<string, string>();
@@ -1191,6 +1290,11 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
                         name = isUnrealizedGainName.Groups[3].Value;
                         var sharesOrProfitLossOrUnitCost = csv.GetField<string>(name);
                         result.Add(name, sharesOrProfitLossOrUnitCost);
+                    }
+                    else if (isSymbolFileName.Success)
+                    {
+                        name = isSymbolFileName.Groups[2].Value;                        
+                        result.Add(name, symbol);
                     }
                     else if (isNotesFileName.Success)
                     {
