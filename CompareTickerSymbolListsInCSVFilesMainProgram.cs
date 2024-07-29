@@ -90,7 +90,7 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
     static string NoteColumnWidth = "400";
     static string SymbolColumnWidth = "37";//"32.75";
     static List<Regex> patSkipFiles = new List<Regex> {
-        new Regex(@"^MinDollarVol10MComp50\.csv$"),
+        new Regex(@"^MinDollarVol10MComp50(ETF)?\.csv$"),
         new Regex(@"^197 Industry Groups\.csv$"),
         new Regex(@"^All_Accounts_GainLoss_Realized(_Details)?_[0-9]+-[0-9]+.csv"),// Schwab TOS download
         new Regex(@"^Individual_[^_]+_Transactions_[0-9]+-[0-9]+.csv"),// Schwab web site download
