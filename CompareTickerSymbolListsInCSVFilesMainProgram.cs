@@ -135,7 +135,7 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
     }
     static double maxNotesDaysOld = 40;
     static int maxNoteSize = 1000;
-    AutoMultiDimSortedDictionary<string/*symbol*/, AutoMultiDimSortedDictionary<DateTime, AutoInitSortedDictionary<string/*metric name*/, string/*metric value*/>>>? defaultTodayValues = null;
+    AutoMultiDimSortedDictionary<string/*symbol*/, AutoMultiDimSortedDictionary<DateTime, AutoInitSortedDictionary<string/*metric name*/, string/*metric value*/>>> defaultTodayValues = null;
     AutoMultiDimSortedDictionary<string/*file name*/, AutoMultiDimSortedDictionary<string /*symbol*/, AutoMultiDimSortedDictionary<DateTime, AutoInitSortedDictionary<string/*metric name*/, string/*metric value*/>>>> mapFileNameToSymbolToDatesToAttributes = new();// new DescendingComparer<string>());
     ExcelStyleSaturationRange stockExcelSaturationAgeStyle;
     AutoInitDoubleSortedDictionary<string> doubleMin = new();
@@ -173,6 +173,13 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
         AutoMultiDimSortedDictionary<string/*symbol*/, AutoMultiDimSortedDictionary<DateTime, AutoInitSortedDictionary<string/*metric name*/, string/*metric value*/>>>? emptyDefaultValues = null;
         var defaultValuesFileName = ExpandEnvironmentVariables(@"%DN%\MinDollarVol10MComp50.csv");
         main.defaultTodayValues = main.ParseCSV(defaultValuesFileName, ExtractDateTimeFromFilePath(defaultValuesFileName).Date, emptyDefaultValues, maxEventAge);
+        defaultValuesFileName = ExpandEnvironmentVariables(@"%DN%\MinDollarVol10MComp50ETF.csv");
+        var defaultTodayETFValues = main.ParseCSV(defaultValuesFileName, ExtractDateTimeFromFilePath(defaultValuesFileName).Date, emptyDefaultValues, maxEventAge);
+        foreach(var (symbol, mapDatesToMetrics) in defaultTodayETFValues)
+            foreach (var (date, mapMetrics) in mapDatesToMetrics)
+                foreach (var (metric, value) in mapMetrics)
+                    main.defaultTodayValues[symbol][date][metric] = value;
+
 
         // Throw away these minimum and maximum values because they are not from the lists were are interested in.
         main.doubleMin = new(); main.doubleMax = new();
