@@ -1228,7 +1228,7 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
         {26, new AttributeAttributes("ETF"                     , false, false, "ETF"                , e=>e, e=>e) },
         {27, new AttributeAttributes("Daily Closing Range"     , true , false, "Daily Closing Range", e=>e, FormatPercentFloat, 100, 0) },
         {28, new AttributeAttributes("Weekly Closing Range"    , true , false, "Weekly Closing Range",e=>e, FormatPercentFloat, 100, 0) },
-        {29, new AttributeAttributes("Market Cap (mil)"        , true , false, "Market Cap (mil)"    ,e=>e, FormatFloat) },
+        {29, new AttributeAttributes("Market Cap (mil)"        , true , false, "Market Cap (mil)"    ,e=>e, FormatFloat, 4_000_000.4,2.0) },
     };
     static string FormatDollarVolume(string e, string M ="")
     {
