@@ -6,6 +6,7 @@ using CompareTickerSymbolListsInCSVFiles;
 using CsvHelper;
 using static System.Console;
 using static System.Environment;
+using static System.Math;
 record AttributeAttributes(string name, bool numeric, bool screenTip, string displayName, Func<string, string> convert, Func<string, string>? orderByConvert, double max = double.MinValue, double min=double.MaxValue);
 class DescendingComparer<T> : IComparer<T> where T : IComparable<T>
 {
@@ -54,6 +55,7 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
          "Merrill-Holdings.csv",
          "Mid Cap.csv",
          "MinDollarVol10MComp50.csv",
+         "MinDollarVol10MComp50ETF.csv",
          "Power from Pivot.csv",
          "RS Line 5% New High.csv",
          "RS Line Blue Dot.csv",
@@ -62,7 +64,9 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
          "ttt ML Holdings.csv",
          //"Swadley Weeks Watch Uni.csv",
          //"Swadley Watch Feb 26.csv",
-         "Top Rated Stocks.csv"
+         "Top Rated Stocks.csv",
+         "ETF Indicies.csv",
+         "Top Sectors ETFs.csv",
     };
 
     static string orderPrefix = "aaa|bbb|ccc|ddd|eee|fff|ggg|hhh|iii|jjj|kkk|lll|mmm|nnn|ooo|ppp|qqq|rrr|sss|ttt|uuu|vvv|www|xxx|yyy|zzz";
@@ -807,8 +811,7 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
                             else if (workSheet.colorCodedAttributeName == "Price % Chg")          ColorCodeBy_Metric(attributeTable, "Price % Chg");
                             else if (workSheet.colorCodedAttributeName == "Daily Closing Range")  ColorCodeBy_Metric(attributeTable, "Daily Closing Range");
                             else if (workSheet.colorCodedAttributeName == "Weekly Closing Range") ColorCodeBy_Metric(attributeTable, "Weekly Closing Range");
-                            else if (workSheet.colorCodedAttributeName == "Market Cap (mil)")     
-                                ColorCodeBy_Metric(attributeTable, "Market Cap (mil)");
+                            else if (workSheet.colorCodedAttributeName == "Market Cap (mil)")     ColorCodeBy_MarketCap(attributeTable, "Market Cap (mil)");
                             else if (string.IsNullOrEmpty(workSheet.colorCodedAttributeName))     ColorCodeBy_Dollar_Volume(attributeTable);
                             else                                                                  ColorCodeBy_Metric(attributeTable, workSheet.colorCodedAttributeName);
                             stockExcelSaturationAgeStyle.InputMetric = metric;
@@ -1024,14 +1027,14 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
     }
     void ColorCodeBy_Metric(AutoInitSortedDictionary<string, string> attributeTable, string metricName)
     {
-        var roeStr = attributeTable[metricName];
-        if (string.IsNullOrEmpty(roeStr) || roeStr == "-")
+        var metricStr = attributeTable[metricName];
+        if (string.IsNullOrEmpty(metricStr) || metricStr == "-")
         {
             stockExcelSaturationAgeStyle.Hue = 290.0 / 360.0 * 255.0;
         }
         else
         {
-            var roe = double.Parse(roeStr.Trim());
+            var metric = double.Parse(metricStr.Trim());
             var min = doubleMin[metricName];
             var max = doubleMax[metricName];
             if (mapAttributeNametoAttributeAttributes[metricName].max != double.MinValue)
@@ -1042,10 +1045,39 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
             {
                 min = Math.Max(min, mapAttributeNametoAttributeAttributes[metricName].min);
             }
-            roe = Math.Min(roe, max);
-            roe = Math.Max(roe, min);
-            roe = (roe - min) / (max - min);
-            stockExcelSaturationAgeStyle.Hue = roe * 180.0 / 360.0 * 255.0;
+            metric = Math.Min(metric, max);
+            metric = Math.Max(metric, min);
+            metric = (metric - min) / (max - min);
+            stockExcelSaturationAgeStyle.Hue = metric * 180.0 / 360.0 * 255.0;
+            // WriteLine($" upDownVol={upDownVolStr} => upDownVol={upDownVol} => stockExcelSaturationAgeStyle.Hue={stockExcelSaturationAgeStyle.Hue}");
+        }
+    }
+    void ColorCodeBy_MarketCap(AutoInitSortedDictionary<string, string> attributeTable, string metricName)
+    {
+        var marketCapStr = attributeTable[metricName];
+        if (string.IsNullOrEmpty(marketCapStr) || marketCapStr == "-")
+        {
+            stockExcelSaturationAgeStyle.Hue = 290.0 / 360.0 * 255.0;
+        }
+        else
+        {
+            var marketCap = Log10(double.Parse(marketCapStr.Trim()));
+            var min = doubleMin[metricName];
+            min = min>0?Log10(min):0;
+            var max = doubleMax[metricName];
+            max = Log10(max);
+            if (mapAttributeNametoAttributeAttributes[metricName].max != double.MinValue)
+            {
+                max = Math.Min(max, mapAttributeNametoAttributeAttributes[metricName].max);
+            }
+            if (mapAttributeNametoAttributeAttributes[metricName].min != double.MaxValue)
+            {
+                min = Math.Max(min, mapAttributeNametoAttributeAttributes[metricName].min);
+            }
+            marketCap = Math.Min(marketCap, max);
+            marketCap = Math.Max(marketCap, min);
+            marketCap = (marketCap - min) / (max - min);
+            stockExcelSaturationAgeStyle.Hue = marketCap * 180.0 / 360.0 * 255.0;
             // WriteLine($" upDownVol={upDownVolStr} => upDownVol={upDownVol} => stockExcelSaturationAgeStyle.Hue={stockExcelSaturationAgeStyle.Hue}");
         }
     }
