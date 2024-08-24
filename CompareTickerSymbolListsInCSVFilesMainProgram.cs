@@ -79,7 +79,7 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
     static Regex patNoteColumnWidthSwitch = new Regex(@"--Note(Col(umn)?Width)?=([0-9]+)");
     static Regex patMaxEventAge = new Regex(@"--MaxEvent(Days?)?Age?=([0-9]+)");
     static Regex patOrderBySwitch = new Regex(@"--OrderBy=([a-zA-Z0-9_%]+)");
-    static Regex patColorBySwitch = new Regex(@"--ColorBy=([a-zA-Z0-9_%/]+)");
+    static Regex patColorBySwitch = new Regex(@"--ColorBy=([a-zA-Z0-9_%/\(\)]+)");
     static Regex patMaxHistory = new Regex(@"--MaxHistory=([0-9]+)");
     static Regex patMaxNotesDaysOld = new Regex(@"--MaxNotesDaysOld=([0-9]+(\.[0-9]+))");
     static Regex patBackHistoryDayCount = new Regex(@"--BackHistoryDays?(Count)?=([0-9]+)");
@@ -105,6 +105,7 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
         new Regex(@"^SEP-IRA-Positions-\d+-\d+-\d+-\d+\.csv$"),
         new Regex(@"^(197 Industry Groups|MarketSmith Growth 250)\.csv$"),
         new Regex(@"^MarketSurge Growth 250\.csv$"),
+        new Regex(@"2024 Aug Holdings Activity.csv$"),
         new Regex(@"^paper trading realized gain loss TOS \d+-\d+-\d+-AccountStatement\.csv$"),
         new Regex(@"^(Merril.*|SEP-IRA.*|paper trading.*|.*Ameritrade.*|197 Industry Groups|MinDollarVol[0-9]+MComp[0-9]+)\.csv$")};
     static List<Regex> patSkipFilesMaterList = new List<Regex> { new Regex(@"^zzz.*\.csv$") };
@@ -318,7 +319,11 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
             var historyDirectoryDateArray = historyDates.ToArray<DateTime>().Reverse<DateTime>().ToArray<DateTime>(); // why do I have to reverse this since it was created with a descending comparitor?
             var rowCount = 0;
             columnCurrent = saveColumnCurrent;
-            main.GenerateXMLWorksheetDataRows(backHistoryDayCount, main.mapFileNameToSymbolToDatesToAttributes, masterSymbolListForWorksheet, mapFileNameToColumnPosition, mapFileNameToFileNameNoExt, mapSymbolToFileNameToDates, sbXMLWorksheetRows, sbCSV, debug, ref rowCount, ref columnCurrent, excelStyles, fileNamesWithHistory, columnCount, historyDirectoryDateArray, mapAttributeNameToScreenTip, workSheet);
+            main.GenerateXMLWorksheetDataRows(backHistoryDayCount, 
+                main.mapFileNameToSymbolToDatesToAttributes, 
+                masterSymbolListForWorksheet, 
+                mapFileNameToColumnPosition, 
+                mapFileNameToFileNameNoExt, mapSymbolToFileNameToDates, sbXMLWorksheetRows, sbCSV, debug, ref rowCount, ref columnCurrent, excelStyles, fileNamesWithHistory, columnCount, historyDirectoryDateArray, mapAttributeNameToScreenTip, workSheet);
             var columnHeaders = $"""<Cell ss:StyleID="s62"><Data ss:Type="String">Order</Data><NamedCell ss:Name="_FilterDatabase"/></Cell>"""
                 + $"""{string.Join("", (fileNames.OrderBy(fn => mapFileNameToColumnPosition[fn])).Select(fn => $"""<Cell ss:StyleID="s62"><Data ss:Type="String">{patAddSpaceNotesSwitch.Replace(mapFileNameToFileNameNoExt[fn], m => $"{m.Groups[1].Value} {m.Groups[2].Value}")}</Data><NamedCell ss:Name="_FilterDatabase"/></Cell>"""))} """
                 + "";
@@ -650,7 +655,9 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
         //WriteLine($"attribute={attributeName} tip={screenTip}");
         return screenTip;
     }
-    void GenerateXMLWorksheetDataRows(int BACK_HISTORY_COUNT, AutoMultiDimSortedDictionary<string, AutoMultiDimSortedDictionary<string, AutoMultiDimSortedDictionary<DateTime, AutoInitSortedDictionary<string, string>>>> mapFileNameToSymbolToDatesToAttributes, SortedDictionary<string, SymbolInList> comparisonGrid, SortedDictionary<string, int> mapFileNameToColumnPosition, SortedDictionary<string, string> mapFileNameToFileNameNoExt, AutoMultiDimSortedDictionary<string, AutoInitSortedDictionary<string, SortedSet<DateTime>>> mapSymbolToFileNameToDates, StringBuilder sbXMLWorksheetRows, StringBuilder sbCSV, bool debug, ref int rowCount, ref int columnCurrent, AutoInitSortedDictionary<string, ExcelStyle> excelStyles, SortedSet<string> fileNamesWithHistory, int columnCount, DateTime[] historyDirectoryDateArray, Dictionary<string, (bool tip, string displayName, Func<string, string> convert)> mapAttributeNameToScreenTip, (string orderBy, string colorCodedAttributeName) workSheet)
+    void GenerateXMLWorksheetDataRows(int BACK_HISTORY_COUNT, 
+        AutoMultiDimSortedDictionary<string, AutoMultiDimSortedDictionary<string, AutoMultiDimSortedDictionary<DateTime, AutoInitSortedDictionary<string, string>>>> mapFileNameToSymbolToDatesToAttributes, 
+        SortedDictionary<string, SymbolInList> comparisonGrid, SortedDictionary<string, int> mapFileNameToColumnPosition, SortedDictionary<string, string> mapFileNameToFileNameNoExt, AutoMultiDimSortedDictionary<string, AutoInitSortedDictionary<string, SortedSet<DateTime>>> mapSymbolToFileNameToDates, StringBuilder sbXMLWorksheetRows, StringBuilder sbCSV, bool debug, ref int rowCount, ref int columnCurrent, AutoInitSortedDictionary<string, ExcelStyle> excelStyles, SortedSet<string> fileNamesWithHistory, int columnCount, DateTime[] historyDirectoryDateArray, Dictionary<string, (bool tip, string displayName, Func<string, string> convert)> mapAttributeNameToScreenTip, (string orderBy, string colorCodedAttributeName) workSheet)
     {
         foreach (var symbol in comparisonGrid.Keys.Where(s => !string.IsNullOrEmpty(s)))
         {
@@ -800,6 +807,8 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
                             else if (workSheet.colorCodedAttributeName == "Price % Chg")          ColorCodeBy_Metric(attributeTable, "Price % Chg");
                             else if (workSheet.colorCodedAttributeName == "Daily Closing Range")  ColorCodeBy_Metric(attributeTable, "Daily Closing Range");
                             else if (workSheet.colorCodedAttributeName == "Weekly Closing Range") ColorCodeBy_Metric(attributeTable, "Weekly Closing Range");
+                            else if (workSheet.colorCodedAttributeName == "Market Cap (mil)")     
+                                ColorCodeBy_Metric(attributeTable, "Market Cap (mil)");
                             else if (string.IsNullOrEmpty(workSheet.colorCodedAttributeName))     ColorCodeBy_Dollar_Volume(attributeTable);
                             else                                                                  ColorCodeBy_Metric(attributeTable, workSheet.colorCodedAttributeName);
                             stockExcelSaturationAgeStyle.InputMetric = metric;
@@ -998,7 +1007,6 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
         var upDownVolStr = attributeTable[metricName];
         if (string.IsNullOrEmpty(upDownVolStr) || upDownVolStr == "-")
         {
-            // Leave off here
             stockExcelSaturationAgeStyle.Hue = 290.0 / 360.0 * 255.0;
         }
         else
@@ -1012,7 +1020,6 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
             }
             upDownVol = (upDownVol - min) / (max - min);
             stockExcelSaturationAgeStyle.Hue = upDownVol * 120.0 / 360.0 * 255.0;
-            // WriteLine($" upDownVol={upDownVolStr} => upDownVol={upDownVol} => stockExcelSaturationAgeStyle.Hue={stockExcelSaturationAgeStyle.Hue}");
         }
     }
     void ColorCodeBy_Metric(AutoInitSortedDictionary<string, string> attributeTable, string metricName)
@@ -1020,7 +1027,6 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
         var roeStr = attributeTable[metricName];
         if (string.IsNullOrEmpty(roeStr) || roeStr == "-")
         {
-            // Leave off here
             stockExcelSaturationAgeStyle.Hue = 290.0 / 360.0 * 255.0;
         }
         else
@@ -1160,8 +1166,10 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
             return strValue;
     }
     static Dictionary<int, AttributeAttributes> mapPositionToAttributeName = new Dictionary<int, AttributeAttributes>{
+        //                            name                      numeric screenTip displayName        convert orderByConvert
+        { 0, new AttributeAttributes("seq"                     , true , false, "seq"                , e=>e, null) },
         { 1, new AttributeAttributes("Current Price"           , true , true , "Price"              , e=>e, null) },
-        { 2, new AttributeAttributes("Price % Chg"             , true , true , "Price % Chg"        , e=>e, FormatFloat, 10,-10)},
+        { 2, new AttributeAttributes("Price % Chg"             , true , true , "Price % Chg"        , e=>e, FormatFloat, 100,-100)},
         { 3, new AttributeAttributes("Comp Rating"             , true , true , "Comp Rating"        , e=>e, FormatInteger) },
         { 4, new AttributeAttributes("EPS Rating"              , true , true , "EPS Rating"         , e=>e, null ) },
         { 5, new AttributeAttributes("RS Rating"               , true , true , "RS Rating"          , e=>e, FormatInteger) },
@@ -1188,6 +1196,7 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
         {26, new AttributeAttributes("ETF"                     , false, false, "ETF"                , e=>e, e=>e) },
         {27, new AttributeAttributes("Daily Closing Range"     , true , false, "Daily Closing Range", e=>e, FormatPercentFloat, 100, 0) },
         {28, new AttributeAttributes("Weekly Closing Range"    , true , false, "Weekly Closing Range",e=>e, FormatPercentFloat, 100, 0) },
+        {29, new AttributeAttributes("Market Cap (mil)"        , true , false, "Market Cap (mil)"    ,e=>e, FormatFloat) },
     };
     static string FormatDollarVolume(string e, string M ="")
     {
