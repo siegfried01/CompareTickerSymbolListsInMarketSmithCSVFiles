@@ -68,6 +68,13 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
          "ETF Indicies.csv",
          "Top Sectors ETFs.csv",
     };
+    static SortedSet<string> confidential = new SortedSet<string>(){
+        "ttt ML Holdings ProfitLossDollar.csv",
+        "ttt ML Holdings Shares.csv",
+        "ttt ML Holdings NetLiquidValue.csv"
+        };
+    static string? envVarSkipConfidential = GetEnvironmentVariable("SKIPCONF");
+    static bool skipConfidential = envVarSkipConfidential != null && envVarSkipConfidential.ToLower() == "true" ? true : false;
 
     static string orderPrefix = "aaa|bbb|ccc|ddd|eee|fff|ggg|hhh|iii|jjj|kkk|lll|mmm|nnn|ooo|ppp|qqq|rrr|sss|ttt|uuu|vvv|www|xxx|yyy|zzz";
     static Regex patFileNameOrderPrefix = new Regex(@$"^(({orderPrefix})\s*)?(.*)$"); // optional file name prefix for implementing the order of the columns
@@ -210,6 +217,10 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
             {
                 debug = true;
             }
+            else if(arg == "--skipConfidential")
+            {
+                skipConfidential = true;
+            }
             else if (arg == "--help")
             {
                 WriteLine("Help: TBD");
@@ -283,8 +294,17 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
                 else if (!generateMasterRegexList && !main.CheckStockFileLists && !SkipFile(fn)) { 
                     WriteLine($"Found extra file '{fn}'.");                
                 }
-                if(!main.CheckStockFileLists)
-                    main.LoadCSVDataFiles(backHistoryDayCount, maxEventAge, generateMasterRegexList, mapFileNameToColumnPosition, mapSymbolToFileNameToDates, mapFileNameToMostRecentFileDate, mapMostRecentDateToFile, ref columnCurrent, emptyDefaultValues, ref history, ref historyDates, fileNamesWithHistory, arg);
+                if (!main.CheckStockFileLists)
+                {
+                    if(skipConfidential && confidential.Contains(fn) )
+                    {
+                        WriteLine($"Skipping confidential file '{fn}'");
+                    }
+                    else
+                    {
+                        main.LoadCSVDataFiles(backHistoryDayCount, maxEventAge, generateMasterRegexList, mapFileNameToColumnPosition, mapSymbolToFileNameToDates, mapFileNameToMostRecentFileDate, mapMostRecentDateToFile, ref columnCurrent, emptyDefaultValues, ref history, ref historyDates, fileNamesWithHistory, arg);
+                    }
+                }
             }
             idxArgs++;
         }
@@ -1201,7 +1221,7 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
         //                            name                      numeric screenTip displayName        convert orderByConvert
         { 0, new AttributeAttributes("seq"                     , true , false, "seq"                , e=>e, null) },
         { 1, new AttributeAttributes("Current Price"           , true , true , "Price"              , e=>e, null) },
-        { 2, new AttributeAttributes("Price % Chg"             , true , true , "Price % Chg"        , e=>e, FormatFloat, 100,-100)},
+        { 2, new AttributeAttributes("Price % Chg"             , true , true , "Price % Chg"        , e=>e, FormatFloat, 10,-10)},
         { 3, new AttributeAttributes("Comp Rating"             , true , true , "Comp Rating"        , e=>e, FormatInteger) },
         { 4, new AttributeAttributes("EPS Rating"              , true , true , "EPS Rating"         , e=>e, null ) },
         { 5, new AttributeAttributes("RS Rating"               , true , true , "RS Rating"          , e=>e, FormatInteger) },
