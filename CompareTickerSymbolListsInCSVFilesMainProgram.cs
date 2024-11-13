@@ -1231,10 +1231,14 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
     static string FormatInteger(string strValue)
     {
         if (Int32.TryParse(strValue, out Int32 value))
-            return value.ToString("000");
+            if (value < 0)
+                return "999";
+            else
+                return value.ToString("000");
         else
             return strValue;
     }
+    // Add new "orderbys" here
     static Dictionary<int, AttributeAttributes> mapPositionToAttributeName = new Dictionary<int, AttributeAttributes>{
         //                            name                      numeric screenTip displayName        convert orderByConvert
         { 0, new AttributeAttributes("seq"                     , true , false, "seq"                , e=>e, null) },
@@ -1499,7 +1503,7 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
                                         else
                                         {
                                             var earningsDate = DateTime.Parse(attrValue);
-                                            var daysUntilEarnings = (earningsDate - DateTime.Now).TotalDays;
+                                            var daysUntilEarnings = (earningsDate - DateTime.Now).TotalDays+1;
                                             if(!result.ContainsKey("Days to Earnings"))
                                                 result.Add("Days to Earnings", ((long)(daysUntilEarnings + 0.5)).ToString());
                                             attrValue = earningsDate.ToString("yyyy-MM-dd ddd");

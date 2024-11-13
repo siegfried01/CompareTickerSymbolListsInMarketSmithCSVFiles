@@ -2,7 +2,7 @@
   "profiles": {
     "CompareTickerSymbolListsInCSVFiles": {
       "commandName": "Project",
-      "commandLineArgs": "--OrderBy=age  --ColorBy=Market_Cap_(mil) --OrderBy=Daily_Closing_Range --ColorBy=%_Off_High --OrderBy=EPS_Rating --ColorBy=%_Off_High --OrderBy=age --ColorBy=%_Off_High --OrderBy=age --OrderBy=age --ColorBy=Funds_%_Increase --OrderBy=age --ColorBy=Number_of_Funds  --OrderBy=age --ColorBy=Price_%_Chg --OrderBy=age --ColorBy=ROE --OrderBy=age --ColorBy=Up/Down_Vol --OrderBy=age --ColorBy=Ind_Group_Rank --OrderBy=age --ColorBy=Comp_Rating  --OrderBy=Ind_Group_Rank  --BackHistoryDays=5  --NoteColWidth=200 --GotoRow=2  --MaxEventAge=3 ",
+      "commandLineArgs": " --OrderBy=Days_to_Earnings --ColorBy=%_Off_High --OrderBy=age  --ColorBy=Market_Cap_(mil) --OrderBy=Daily_Closing_Range --ColorBy=%_Off_High --OrderBy=EPS_Rating --ColorBy=%_Off_High --OrderBy=age --ColorBy=%_Off_High --OrderBy=age --OrderBy=age --ColorBy=Funds_%_Increase --OrderBy=age --ColorBy=Number_of_Funds  --OrderBy=age --ColorBy=Price_%_Chg --OrderBy=age --ColorBy=ROE --OrderBy=age --ColorBy=Up/Down_Vol --OrderBy=age --ColorBy=Ind_Group_Rank --OrderBy=age --ColorBy=Comp_Rating  --OrderBy=Ind_Group_Rank  --BackHistoryDays=5  --NoteColWidth=200 --GotoRow=2  --MaxEventAge=3 ",
       "workingDirectory": "C:\\Users\\shein\\Downloads"
     }
   }
