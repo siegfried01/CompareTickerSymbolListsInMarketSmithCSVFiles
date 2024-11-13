@@ -64,7 +64,7 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
          "ttt ML Holdings.csv",
          //"Swadley Weeks Watch Uni.csv",
          //"Swadley Watch Feb 26.csv",
-         "Top Rated Stocks.csv",
+         //"Top Rated Stocks.csv",
          "ETF Indicies.csv",
          "Top Sectors ETFs.csv",
     };
@@ -115,7 +115,7 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
         new Regex(@"^[0-9]+-[0-9]+-[0-9]+-PositionStatement\.csv$"), // Schwab TOS download
         new Regex(@"^SEP-IRA-Positions-\d+-\d+-\d+-\d+\.csv$"),
         new Regex(@"^(197 Industry Groups|MarketSmith Growth 250)\.csv$"),
-        new Regex(@"^MarketSurge Growth 250\.csv$"),
+        //new Regex(@"^MarketSurge Growth 250\.csv$"),
         new Regex(@"2024 Aug Holdings Activity.csv$"),
         new Regex(@"^paper trading realized gain loss TOS \d+-\d+-\d+-AccountStatement\.csv$"),
         new Regex(@"^(Merril.*|SEP-IRA.*|paper trading.*|.*Ameritrade.*|197 Industry Groups|MinDollarVol[0-9]+MComp[0-9]+)\.csv$")};
@@ -811,40 +811,39 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
                         }
                         latestAttributes[symbol][fileName] = mapFileNameToSymbolToDatesToAttributes[fileName][symbol][latest];
                         var attributeTable = mapFileNameToSymbolToDatesToAttributes[fileName][symbol][latest];
-                        var attributes2 = string.Join(",", attributeTable
+                        var screenTip = string.Join(",", attributeTable
                             .Where(e => !string.IsNullOrEmpty(e.Value) && e.Key != "seq" && isScreenTip(e.Key, mapAttributeNameToScreenTip))
                             .Select(e => mapAttributeNameToScreenTip.ContainsKey(e.Key) ? $"""{mapAttributeNameToScreenTip[e.Key].displayName}={patRemoveLeadingZeros.Replace(mapAttributeNameToScreenTip[e.Key].convert(e.Value), m => m.Groups[2].Value)}""" : $"""{e.Key}={e.Value}"""));
-                        attributes2 = $"age={age}," + attributes2;
-                        if (attributes2.Length > 255)
-                            attributes2 = attributes2.Substring(0, 255);
+                        screenTip = $"age={age}," + screenTip;
+                        screenTip = TruncateString(screenTip);
                         var styleName2 = "s68";
                         if (age != 0 && fileNamesWithHistory.Contains(fileName))
                         {
                             var metric = 1.0 * age / (BACK_HISTORY_COUNT + 1);
                             metric = Math.Log(metric * (BACK_HISTORY_COUNT + 1)) / Math.Log(BACK_HISTORY_COUNT + 1);
-                            if (workSheet.colorCodedAttributeName == "Ind Group Rank")            ColorCodeBy_Ind_Group_Rank(attributeTable);
-                            else if (workSheet.colorCodedAttributeName == "Comp Rating")          ColorCodeBy_Comp_Rating(attributeTable, "Comp Rating");
-                            else if (workSheet.colorCodedAttributeName == "RS Rating")            ColorCodeBy_Comp_Rating(attributeTable, "RS Rating");
-                            else if (workSheet.colorCodedAttributeName == "EPS Rating")           ColorCodeBy_Comp_Rating(attributeTable, "EPS Rating");
-                            else if (workSheet.colorCodedAttributeName == "Up/Down Vol")          ColorCodeBy_Metric(attributeTable, "Up/Down Vol");  //ColorCodeBy_UpDown_Rating(attributeTable, "Up/Down Vol");
-                            else if (workSheet.colorCodedAttributeName == "ROE")                  ColorCodeBy_Metric(attributeTable, "ROE");
-                            else if (workSheet.colorCodedAttributeName == "Price % Chg")          ColorCodeBy_Metric(attributeTable, "Price % Chg");
-                            else if (workSheet.colorCodedAttributeName == "Daily Closing Range")  ColorCodeBy_Metric(attributeTable, "Daily Closing Range");
+                            if (     workSheet.colorCodedAttributeName == "Ind Group Rank") ColorCodeBy_Ind_Group_Rank(attributeTable);
+                            else if (workSheet.colorCodedAttributeName == "Comp Rating")    ColorCodeBy_Comp_Rating(attributeTable, "Comp Rating");
+                            else if (workSheet.colorCodedAttributeName == "RS Rating")      ColorCodeBy_Comp_Rating(attributeTable, "RS Rating");
+                            else if (workSheet.colorCodedAttributeName == "EPS Rating")     ColorCodeBy_Comp_Rating(attributeTable, "EPS Rating");
+                            else if (workSheet.colorCodedAttributeName == "Up/Down Vol")    ColorCodeBy_Metric(attributeTable, "Up/Down Vol");  //ColorCodeBy_UpDown_Rating(attributeTable, "Up/Down Vol");
+                            else if (workSheet.colorCodedAttributeName == "ROE")            ColorCodeBy_Metric(attributeTable, "ROE");
+                            else if (workSheet.colorCodedAttributeName == "Price % Chg")    ColorCodeBy_Metric(attributeTable, "Price % Chg");
+                            else if (workSheet.colorCodedAttributeName == "Daily Closing Range") ColorCodeBy_Metric(attributeTable, "Daily Closing Range");
                             else if (workSheet.colorCodedAttributeName == "Weekly Closing Range") ColorCodeBy_Metric(attributeTable, "Weekly Closing Range");
-                            else if (workSheet.colorCodedAttributeName == "Market Cap (mil)")     ColorCodeBy_MarketCap(attributeTable, "Market Cap (mil)");
-                            else if (string.IsNullOrEmpty(workSheet.colorCodedAttributeName))     ColorCodeBy_Dollar_Volume(attributeTable);
-                            else                                                                  ColorCodeBy_Metric(attributeTable, workSheet.colorCodedAttributeName);
+                            else if (workSheet.colorCodedAttributeName == "Market Cap (mil)") ColorCodeBy_MarketCap(attributeTable, "Market Cap (mil)");
+                            else if (string.IsNullOrEmpty(workSheet.colorCodedAttributeName)) ColorCodeBy_Dollar_Volume(attributeTable);
+                            else ColorCodeBy_Metric(attributeTable, workSheet.colorCodedAttributeName);
                             stockExcelSaturationAgeStyle.InputMetric = metric;
                             var RGBHexColor = stockExcelSaturationAgeStyle.ColorHexRGB; // add pattern here for dollar volume
                             ExcelStyle style;
-                            if(attributeTable.ContainsKey("50-Day Avg $ Vol (1000s)") && !string.IsNullOrEmpty(attributeTable["50-Day Avg $ Vol (1000s)"]))
+                            if (attributeTable.ContainsKey("50-Day Avg $ Vol (1000s)") && !string.IsNullOrEmpty(attributeTable["50-Day Avg $ Vol (1000s)"]))
                             {
                                 double dv = 0;
                                 if (double.TryParse(attributeTable["50-Day Avg $ Vol (1000s)"].Replace(",", ""), out dv))
                                 {
                                     dv = dv * 1000;
                                 }
-                                else 
+                                else
                                 {
                                     dv = 0;
                                     //WriteLine($"Error: {fileName} {symbol} 50-Day Avg $ Vol (1000s)={attributeTable["50-Day Avg $ Vol (1000s)"]}");
@@ -858,6 +857,7 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
                                     //style = new ExcelStyle { Color = RGBHexColor, Name = "s" + RGBHexColor };
                                     //excelStyles[RGBHexColor] = style;
                                     //styleName2 = "s" + RGBHexColor;
+                                    screenTip = PrependToScreenTip(symbol, screenTip);
                                 }
                                 else if (dv < 20 * 1000 * 1000)
                                 {
@@ -868,6 +868,7 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
                                     //style = new ExcelStyle { Color = RGBHexColor, Name = "s" + RGBHexColor };
                                     //excelStyles[RGBHexColor] = style;
                                     //styleName2 = "s" + RGBHexColor;
+                                    screenTip = PrependToScreenTip(symbol, screenTip);
                                 }
                                 else
                                 {
@@ -908,7 +909,7 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
                         }
                         //if (orderBy == "age" && symbol == "SPXC" && fileName == "RS Line Blue Dot.csv")  WriteLine($"symbol={symbol} age={age} seqNoAndSymbol={seqNoAndSymbol} attributes={attributes}");
 
-                        sbXMLWorksheetRows.AppendLine($"""    <Cell{skipToIndex} ss:StyleID="{styleName2}" ss:HRef="https://marketsmith.investors.com/mstool?Symbol={symbol}&amp;Periodicity=Daily&amp;InstrumentType=Stock&amp;Source=sitemarketcondition&amp;AlertSubId=8241925&amp;ListId=0&amp;ParentId=0" x:HRefScreenTip="{attributes2}"><Data ss:Type="String">{seqNoAndSymbol}</Data><NamedCell ss:Name="_FilterDatabase"/></Cell><!-- col={columnCurrent} fn={fileName}--> """);
+                        sbXMLWorksheetRows.AppendLine($"""    <Cell{skipToIndex} ss:StyleID="{styleName2}" ss:HRef="https://marketsmith.investors.com/mstool?Symbol={symbol}&amp;Periodicity=Daily&amp;InstrumentType=Stock&amp;Source=sitemarketcondition&amp;AlertSubId=8241925&amp;ListId=0&amp;ParentId=0" x:HRefScreenTip="{screenTip}"><Data ss:Type="String">{seqNoAndSymbol}</Data><NamedCell ss:Name="_FilterDatabase"/></Cell><!-- col={columnCurrent} fn={fileName}--> """);
                     }
                 }
                 columnCurrent++;
@@ -958,6 +959,23 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
                 throw ex;
             }
         }
+    }
+
+    private static string PrependToScreenTip(string? symbol, string screenTip)
+    {
+        screenTip = symbol + " " + screenTip;
+        screenTip = TruncateString(screenTip);
+        return screenTip;
+    }
+
+    private static string TruncateString(string screenTip, int maxLength=255)
+    {
+        if (screenTip.Length > maxLength)
+        {
+            var lastComma= screenTip.LastIndexOf(',');
+            screenTip = screenTip.Substring(0, lastComma > -1 ? lastComma: maxLength);
+        }
+        return screenTip;
     }
 
     void ColorCodeBy_Dollar_Volume(AutoInitSortedDictionary<string, string> attributeTable)
@@ -1230,7 +1248,7 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
         { 8, new AttributeAttributes("50-Day Avg $ Vol (1000s)", true , true , "50-Day Avg $M Vol"  , e=>FormatDollarVolume(e,"M"), e => FormatDollarVolume(e))},
         { 9, new AttributeAttributes("Ind Group Rank"          , true , true , "Ind Group Rank"     , e=>e, FormatInteger) },
         {10, new AttributeAttributes("Industry Name"           , false, true , "Industry Name"      , e=>e, null) },
-        {11, new AttributeAttributes("Sector"                  , false, true , "Sector"             , e=>e, null) },
+        {11, new AttributeAttributes("Sector"                  , false, false, "Sector"             , e=>e, null) },
         {12, new AttributeAttributes("Name"                    , false, true , "Name"               , e=>e, null) },
         {13, new AttributeAttributes("Sponsor Rating"          , false, false, "Sponsor Rating"     , e=>e, null) },
         {14, new AttributeAttributes("Funds % Increase"        , true , false, "Funds % Increase"   , e=>e, FormatFloat, 10,0) },
@@ -1248,7 +1266,7 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
         {26, new AttributeAttributes("ETF"                     , false, false, "ETF"                , e=>e, e=>e) },
         {27, new AttributeAttributes("Daily Closing Range"     , true , false, "Daily Closing Range", e=>e, FormatPercentFloat, 100, 0) },
         {28, new AttributeAttributes("Weekly Closing Range"    , true , false, "Weekly Closing Range",e=>e, FormatPercentFloat, 100, 0) },
-        {29, new AttributeAttributes("Market Cap (mil)"        , true , false, "Market Cap (mil)"    ,e=>e, FormatFloat, 4_000_000.4,2.0) },
+        {29, new AttributeAttributes("Market Cap (mil)"        , true , true , "Market Cap (mil)"    ,e=>e, FormatFloat, 4_000_000.4,2.0) },
     };
     static string FormatDollarVolume(string e, string M ="")
     {
