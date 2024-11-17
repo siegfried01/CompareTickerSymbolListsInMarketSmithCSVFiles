@@ -1271,6 +1271,10 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
         {27, new AttributeAttributes("Daily Closing Range"     , true , false, "Daily Closing Range", e=>e, FormatPercentFloat, 100, 0) },
         {28, new AttributeAttributes("Weekly Closing Range"    , true , false, "Weekly Closing Range",e=>e, FormatPercentFloat, 100, 0) },
         {29, new AttributeAttributes("Market Cap (mil)"        , true , true , "Market Cap (mil)"    ,e=>e, FormatFloat, 4_000_000.4,2.0) },
+        {30, new AttributeAttributes("21 Day ATR %"            , true , false, "21 Day ATR %"        ,e=>e, FormatFloat, 100, 0) },
+        {31, new AttributeAttributes("30 Day ATR %"            , true , false, "30 Day ATR %"        ,e=>e, FormatFloat, 100, 0) },
+        {32, new AttributeAttributes("50 Day ATR %"            , true , false, "50 Day ATR %"        ,e=>e, FormatFloat, 100, 0) },
+
     };
     static string FormatDollarVolume(string e, string M ="")
     {
