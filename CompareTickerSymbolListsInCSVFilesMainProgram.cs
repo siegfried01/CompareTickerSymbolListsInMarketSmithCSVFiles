@@ -7,7 +7,7 @@ using CsvHelper;
 using static System.Console;
 using static System.Environment;
 using static System.Math;
-record AttributeAttributes(string name, bool numeric, bool screenTip, string displayName, Func<string, string> convert, Func<string, string>? orderByConvert, double max = double.MinValue, double min=double.MaxValue);
+record AttributeAttributes(string name, bool numeric, bool screenTip, string displayName, Func<string, string> convert, Func<string, string, string>? orderByConvert, double max = double.MinValue, double min=double.MaxValue);
 class DescendingComparer<T> : IComparer<T> where T : IComparable<T>
 {
     public static bool reverse { get; set; } = false;
@@ -89,7 +89,7 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
     static Regex patAddSpaceNotesSwitch = new Regex(@"^(.*)(Notes)$");
     static Regex patNoteColumnWidthSwitch = new Regex(@"--Note(Col(umn)?Width)?=([0-9]+)");
     static Regex patMaxEventAge = new Regex(@"--MaxEvent(Days?)?Age?=([0-9]+)");
-    static Regex patOrderBySwitch = new Regex(@"--OrderBy=([a-zA-Z0-9_%]+)");
+    static Regex patOrderBySwitch = new Regex(@"--OrderBy=([a-zA-Z0-9_%\(\)]+)");
     static Regex patColorBySwitch = new Regex(@"--ColorBy=([a-zA-Z0-9_%/\(\)]+)");
     static Regex patMaxHistory = new Regex(@"--MaxHistory=([0-9]+)");
     static Regex patMaxNotesDaysOld = new Regex(@"--MaxNotesDaysOld=([0-9]+(\.[0-9]+))");
@@ -118,6 +118,7 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
         //new Regex(@"^MarketSurge Growth 250\.csv$"),
         new Regex(@"2024 Aug Holdings Activity.csv$"),
         new Regex(@"^paper trading realized gain loss TOS \d+-\d+-\d+-AccountStatement\.csv$"),
+        new Regex(@"Lot-Details.csv$"),
         new Regex(@"^(Merril.*|SEP-IRA.*|paper trading.*|.*Ameritrade.*|197 Industry Groups|MinDollarVol[0-9]+MComp[0-9]+)\.csv$")};
     static List<Regex> patSkipFilesMaterList = new List<Regex> { new Regex(@"^zzz.*\.csv$") };
     static DateTime TODAY = System.DateTime.Today.AddHours(12);
@@ -150,8 +151,8 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
     AutoMultiDimSortedDictionary<string/*symbol*/, AutoMultiDimSortedDictionary<DateTime, AutoInitSortedDictionary<string/*metric name*/, string/*metric value*/>>> defaultTodayValues = null;
     AutoMultiDimSortedDictionary<string/*file name*/, AutoMultiDimSortedDictionary<string /*symbol*/, AutoMultiDimSortedDictionary<DateTime, AutoInitSortedDictionary<string/*metric name*/, string/*metric value*/>>>> mapFileNameToSymbolToDatesToAttributes = new();// new DescendingComparer<string>());
     ExcelStyleSaturationRange stockExcelSaturationAgeStyle;
-    AutoInitDoubleSortedDictionary<string> doubleMin = new();
-    AutoInitDoubleSortedDictionary<string> doubleMax = new();
+    static AutoInitDoubleSortedDictionary<string> doubleMin = new();
+    static AutoInitDoubleSortedDictionary<string> doubleMax = new();
     public bool CheckStockFileLists {get; set; } = false;
     public static void Main(string[] args)
     {
@@ -194,7 +195,7 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
 
 
         // Throw away these minimum and maximum values because they are not from the lists were are interested in.
-        main.doubleMin = new(); main.doubleMax = new();
+        doubleMin = new(); doubleMax = new();
 
         mapPositionToAttributeName.ToList().ForEach(e => mapAttributeNameToScreenTip.Add(e.Value.name, (e.Value.screenTip, e.Value.displayName, e.Value.convert)));
 
@@ -335,6 +336,39 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
         mapFileNameToFileNameNoExt = MakeMapFileNameToFileNameNoExt(fileNames);
         var finalExcelOutputFilePath = ExpandEnvironmentVariables(@$"%USERPROFILE%\Downloads\CompareMarketSmithLists_{DateTime.Now.ToString("yyyy-MMM-dd-ddd-HH")}.{(generateCSV || generateMasterRegexList ? "csv" : "xml")}");
         var saveColumnCurrent = columnCurrent;
+        var sbLegend = new StringBuilder();
+        foreach (var worksheet in workSheets)
+        {
+            sbLegend.Append("""<Row><Cell><Data ss:Type="String">""");
+            sbLegend.Append($"Sort by {worksheet.orderBy} {(string.IsNullOrEmpty(worksheet.colorCodedAttributeName) ? "" : $"-Color by {worksheet.colorCodedAttributeName}")}");
+            sbLegend.Append("</Data></Cell></Row>\n");
+        }
+        var legend=$"""
+            <Worksheet ss:Name="Legend">
+             <Table ss:ExpandedColumnCount="1" ss:ExpandedRowCount="{workSheets.Count()}" x:FullColumns="1"
+              x:FullRows="1" ss:DefaultRowHeight="15">
+              <Column ss:AutoFitWidth="0" ss:Width="417"/>
+              {sbLegend.ToString()}
+             </Table>
+             <WorksheetOptions xmlns="urn:schemas-microsoft-com:office:excel">
+              <PageSetup>
+               <Header x:Margin="0.3"/>
+               <Footer x:Margin="0.3"/>
+               <PageMargins x:Bottom="0.75" x:Left="0.7" x:Right="0.7" x:Top="0.75"/>
+              </PageSetup>
+              <Selected/>
+              <Panes>
+               <Pane>
+                <Number>3</Number>
+                <ActiveRow>9</ActiveRow>
+               </Pane>
+              </Panes>
+              <ProtectObjects>False</ProtectObjects>
+              <ProtectScenarios>False</ProtectScenarios>
+             </WorksheetOptions>
+            </Worksheet>
+            """;
+        workSheetXML.Add(legend);
         foreach (var workSheet in workSheets)
         {
             var sbXMLWorksheetRows = new StringBuilder();
@@ -357,7 +391,7 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
             columnCount++; // include the extra column for the current row
             string workSheetDisplayName = workSheetName + workSheet.orderBy.Trim() + (string.IsNullOrEmpty(workSheet.colorCodedAttributeName) ? "" : "-ColorBy" + workSheet.colorCodedAttributeName.Replace("/", ""));
             var len = workSheetDisplayName.Length;
-            workSheetXML.Add(ComposeWorkSheet(initialRow, sbXMLWorksheetRows, workSheetDisplayName, rowCount, xmlColumnWidths, verticalSplitter, columnCount, columnHeaders));
+            workSheetXML.Add(ComposeWorkSheet(initialRow, sbXMLWorksheetRows.ToString(), workSheetDisplayName, rowCount, xmlColumnWidths, verticalSplitter, columnCount, columnHeaders));
         }
         if (!generateMasterRegexList)
         {
@@ -526,7 +560,7 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
             WriteLine(((skip ? "Skip file" : "File not found") + ": ") + fileName);
         }
     }
-    static string ComposeWorkSheet(string initialRow, StringBuilder sbXMLWorksheetRows, string workSheetName, int rowCount, List<string> xmlColumnWidths, bool verticalSplitter, int columnCount, string columnHeaders)
+    static string ComposeWorkSheet(string initialRow, string XMLWorksheetRows, string workSheetName, int rowCount, List<string> xmlColumnWidths, bool verticalSplitter, int columnCount, string columnHeaders)
     {
         return $"""
              <Worksheet ss:Name="{workSheetName}">
@@ -538,7 +572,7 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
                  <Row ss:Height="230.25">
                    {columnHeaders}
                  </Row>
-                 {sbXMLWorksheetRows.ToString()}
+                 {XMLWorksheetRows}
                </Table>
                <WorksheetOptions xmlns="urn:schemas-microsoft-com:office:excel">
                 <PageSetup>
@@ -827,7 +861,8 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
                             else if (workSheet.colorCodedAttributeName == "EPS Rating")     ColorCodeBy_Comp_Rating(attributeTable, "EPS Rating");
                             else if (workSheet.colorCodedAttributeName == "Up/Down Vol")    ColorCodeBy_Metric(attributeTable, "Up/Down Vol");  //ColorCodeBy_UpDown_Rating(attributeTable, "Up/Down Vol");
                             else if (workSheet.colorCodedAttributeName == "ROE")            ColorCodeBy_Metric(attributeTable, "ROE");
-                            else if (workSheet.colorCodedAttributeName == "Price % Chg")    ColorCodeBy_Metric(attributeTable, "Price % Chg");
+                            else if (workSheet.colorCodedAttributeName == "Price % Chg")    
+                                ColorCodeBy_Metric(attributeTable, "Price % Chg");
                             else if (workSheet.colorCodedAttributeName == "Daily Closing Range") ColorCodeBy_Metric(attributeTable, "Daily Closing Range");
                             else if (workSheet.colorCodedAttributeName == "Weekly Closing Range") ColorCodeBy_Metric(attributeTable, "Weekly Closing Range");
                             else if (workSheet.colorCodedAttributeName == "Market Cap (mil)") ColorCodeBy_MarketCap(attributeTable, "Market Cap (mil)");
@@ -897,7 +932,7 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
                             var attrValue = mapFileNameToSymbolToDatesToAttributes[fileName][symbol][latest][workSheet.orderBy];
                             if (!string.IsNullOrEmpty(attrValue) && mapAttributeNametoAttributeAttributes.ContainsKey(workSheet.orderBy) && mapAttributeNametoAttributeAttributes[workSheet.orderBy].numeric && mapAttributeNametoAttributeAttributes[workSheet.orderBy].orderByConvert != null)
                             {
-                                attrValue = mapAttributeNametoAttributeAttributes[workSheet.orderBy].orderByConvert(attrValue);
+                                attrValue = mapAttributeNametoAttributeAttributes[workSheet.orderBy].orderByConvert(attrValue, workSheet.orderBy);
                                 seqNoAndSymbol = $"{attrValue} {symbol}";
                             }
                             else if (Int32.TryParse(attrValue ?? "999", out int attr1))
@@ -969,12 +1004,15 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
     }
 
     private static string TruncateString(string screenTip, int maxLength=255)
-    {
-        if (screenTip.Length > maxLength)
+    { 
+        var maxTries = 20;
+        for(var count=0; count < maxTries && screenTip.Length > maxLength; count++)
         {
             var lastComma= screenTip.LastIndexOf(',');
             screenTip = screenTip.Substring(0, lastComma > -1 ? lastComma: maxLength);
         }
+        if (screenTip.Length > maxLength)
+            screenTip = screenTip.Substring(0, maxLength);
         return screenTip;
     }
 
@@ -1228,7 +1266,7 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
         var fileNameWithOutExtension = match.Success ? match.Groups[1].Value : Path.GetFileName(fileName);
         return fileNameWithOutExtension;
     }
-    static string FormatInteger(string strValue)
+    static string FormatInteger(string strValue, string _)
     {
         if (Int32.TryParse(strValue, out Int32 value))
             if (value < 0)
@@ -1238,18 +1276,43 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
         else
             return strValue;
     }
+    static string MapLogDoubleToInteger(string strValue, string attrName)
+    {
+        var min = doubleMin[attrName];
+        if(min>0)
+            min = Math.Log10(min);
+        var max = doubleMax[attrName];
+        if(max>0)
+            max = Math.Log10(max);
+        if (double.TryParse(strValue, out double value))
+        {
+            if(value >0)
+                value = Math.Log10(value);
+            if (value == max)
+            {
+                return "999";
+            }
+            else
+            {
+                var mappedValue = (value - min) / (max - min);
+                var result = (int)(mappedValue * 1000 + 0.5);
+                return result.ToString("000");
+            }
+        }
+        return "999";
+    }
     // Add new "orderbys" here
     static Dictionary<int, AttributeAttributes> mapPositionToAttributeName = new Dictionary<int, AttributeAttributes>{
         //                            name                      numeric screenTip displayName        convert orderByConvert
         { 0, new AttributeAttributes("seq"                     , true , false, "seq"                , e=>e, null) },
         { 1, new AttributeAttributes("Current Price"           , true , true , "Price"              , e=>e, null) },
-        { 2, new AttributeAttributes("Price % Chg"             , true , true , "Price % Chg"        , e=>e, FormatFloat, 10,-10)},
+        { 2, new AttributeAttributes("Price % Chg"             , true , true , "Price % Chg"        , e=>e, MapLogDoubleToInteger,5,-5)},
         { 3, new AttributeAttributes("Comp Rating"             , true , true , "Comp Rating"        , e=>e, FormatInteger) },
         { 4, new AttributeAttributes("EPS Rating"              , true , true , "EPS Rating"         , e=>e, null ) },
         { 5, new AttributeAttributes("RS Rating"               , true , true , "RS Rating"          , e=>e, FormatInteger) },
         { 6, new AttributeAttributes("A/D Rating"              , false, true , "A/D Rating"         , e=>e, null) },
         { 7, new AttributeAttributes("SMR Rating"              , false, true , "SMR Rating"         , e=>e, null) },
-        { 8, new AttributeAttributes("50-Day Avg $ Vol (1000s)", true , true , "50-Day Avg $M Vol"  , e=>FormatDollarVolume(e,"M"), e => FormatDollarVolume(e))},
+        { 8, new AttributeAttributes("50-Day Avg $ Vol (1000s)", true , true , "50-Day Avg $M Vol"  , e=>   FormatDollarVolume(e,"M"), (e,_) => FormatDollarVolume(e))},
         { 9, new AttributeAttributes("Ind Group Rank"          , true , true , "Ind Group Rank"     , e=>e, FormatInteger) },
         {10, new AttributeAttributes("Industry Name"           , false, true , "Industry Name"      , e=>e, null) },
         {11, new AttributeAttributes("Sector"                  , false, false, "Sector"             , e=>e, null) },
@@ -1267,10 +1330,10 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
         {23, new AttributeAttributes("ROE"                     , true , true , "ROE"                , e=>e, FormatFloat, 100,-100) },
         {24, new AttributeAttributes("Up/Down Vol"             , true , true , "Up/Down Vol"        , e=>e, FormatFloat, 2) },
         {25, new AttributeAttributes("Yield"                   , true , true , "Yield"              , e=>e, FormatFloat) },
-        {26, new AttributeAttributes("ETF"                     , false, false, "ETF"                , e=>e, e=>e) },
+        {26, new AttributeAttributes("ETF"                     , false, false, "ETF"                , e=>e, (e,n)=>e) },
         {27, new AttributeAttributes("Daily Closing Range"     , true , false, "Daily Closing Range", e=>e, FormatPercentFloat, 100, 0) },
         {28, new AttributeAttributes("Weekly Closing Range"    , true , false, "Weekly Closing Range",e=>e, FormatPercentFloat, 100, 0) },
-        {29, new AttributeAttributes("Market Cap (mil)"        , true , true , "Market Cap (mil)"    ,e=>e, FormatFloat, 4_000_000.4,2.0) },
+        {29, new AttributeAttributes("Market Cap (mil)"        , true , true , "Market Cap (mil)"    ,e=>e, MapLogDoubleToInteger, 4_000_000.4,2.0) },
         {30, new AttributeAttributes("21 Day ATR %"            , true , false, "21 Day ATR %"        ,e=>e, FormatFloat, 100, 0) },
         {31, new AttributeAttributes("30 Day ATR %"            , true , false, "30 Day ATR %"        ,e=>e, FormatFloat, 100, 0) },
         {32, new AttributeAttributes("50 Day ATR %"            , true , false, "50 Day ATR %"        ,e=>e, FormatFloat, 100, 0) },
@@ -1283,18 +1346,19 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
         else 
             return $"{double.Parse(e.Replace(",", "")) / 1e3:000.00}{M}";
     }
-    static string FormatFloat(string e)
+    static string FormatFloat(string e, string _)
     {
         if (string.IsNullOrEmpty(e) || e == "-") 
         { 
-            return e; 
+            //return e;
+            return "  999.99";
         } 
         else {
             var val = double.Parse(e.Replace(",", ""));
             return val < 0 ? $"{val:000.00}" : $"{val:  000.00}"; 
         } 
     }
-    static string FormatPercentFloat(string e)
+    static string FormatPercentFloat(string e, string _)
     {
         if (string.IsNullOrEmpty(e) || e == "-")
         {
