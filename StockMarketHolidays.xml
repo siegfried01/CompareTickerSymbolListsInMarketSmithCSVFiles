@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<StockMarketHolidays year="2025">
+    <FullClosures>
+        <Holiday date="2025-01-20">Martin Luther King Jr. Day</Holiday>
+        <Holiday date="2025-02-17">Presidents Day</Holiday>
+        <Holiday date="2025-04-18">Good Friday</Holiday>
+        <Holiday date="2025-05-26">Memorial Day</Holiday>
+        <Holiday date="2025-06-19">Juneteenth</Holiday>
+        <Holiday date="2025-07-04">Independence Day</Holiday>
+        <Holiday date="2025-09-01">Labor Day</Holiday>
+        <Holiday date="2025-11-27">Thanksgiving Day</Holiday>
+        <Holiday date="2025-12-25">Christmas Day</Holiday>
+    </FullClosures>
+    
+    <PartialClosures>
+        <Closure date="2025-03-28" market="Bond" closeTime="14:00" description="Maundy Thursday"/>
+        <Closure date="2025-05-23" market="Bond" closeTime="14:00" description="Friday before Memorial Day"/>
+        <Closure date="2025-07-03" market="Stock" closeTime="13:00" description="Day before Independence Day"/>
+        <Closure date="2025-07-03" market="Bond" closeTime="14:00" description="Day before Independence Day"/>
+        <Closure date="2025-10-13" market="Bond" closeTime="Closed" description="Columbus Day / Indigenous Peoples' Day"/>
+        <Closure date="2025-11-28" market="Stock" closeTime="13:00" description="Black Friday"/>
+        <Closure date="2025-11-28" market="Bond" closeTime="14:00" description="Black Friday"/>
+        <Closure date="2025-12-24" market="Stock" closeTime="13:00" description="Christmas Eve"/>
+        <Closure date="2025-12-24" market="Bond" closeTime="14:00" description="Christmas Eve"/>
+        <Closure date="2025-12-31" market="Bond" closeTime="14:00" description="New Year's Eve"/>
+    </PartialClosures>
+</StockMarketHolidays>

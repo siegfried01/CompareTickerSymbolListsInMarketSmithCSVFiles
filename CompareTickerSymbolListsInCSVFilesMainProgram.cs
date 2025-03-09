@@ -64,14 +64,16 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
          "ttt ML Holdings.csv",
          //"Swadley Weeks Watch Uni.csv",
          //"Swadley Watch Feb 26.csv",
-         //"Top Rated Stocks.csv",
+         "Top Rated Stocks.csv",
          "ETF Indicies.csv",
          "Top Sectors ETFs.csv",
     };
     static SortedSet<string> confidential = new SortedSet<string>(){
         "ttt ML Holdings ProfitLossDollar.csv",
         "ttt ML Holdings Shares.csv",
-        "ttt ML Holdings NetLiquidValue.csv"
+        "ttt ML Holdings NetLiquidValue.csv",
+        "sss Schwab Shares.csv",
+        "sss Schwab NetLiquidValue.csv",
         };
     static string? envVarSkipConfidential = GetEnvironmentVariable("SKIPCONF");
     static bool skipConfidential = envVarSkipConfidential != null && envVarSkipConfidential.ToLower() == "true" ? true : false;
@@ -80,9 +82,13 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
     static Regex patFileNameOrderPrefix = new Regex(@$"^(({orderPrefix})\s*)?(.*)$"); // optional file name prefix for implementing the order of the columns
     static Regex patFileExtension = new Regex("^([^\\.]+)\\.([^\\.]+)$");
     static Regex patGotoRow = new Regex("^--GotoRow=([0-9]+)$");
+    //static Regex patSymbol = new Regex(@$"({orderPrefix})([a-zA-Z0-9]*)\s*Symbol(\.csv)?$");
     //[GeneratedRegex(@"zzz([a-zA-Z0-9]*)Notes(\.csv)?$")]
-    static Regex patSymbol = new Regex(@$"({orderPrefix})([a-zA-Z0-9]*)\s*Symbol(\.csv)?$");
     static Regex patNotes = new Regex(@$"({orderPrefix})([a-zA-Z0-9]*)\s*Notes(\.csv)?$");
+    static Regex patGroup = new Regex(@$"({orderPrefix})\s*([a-zA-Z0-9]*)\s*Group(\.csv)?$");
+    static Regex patSymbolName = new Regex(@$"({orderPrefix})\s*([a-zA-Z0-9]*)\s*SymbolName(\.csv)?$");
+    static Regex patDecoratedSymbol = new Regex(@$"({orderPrefix})\s*([a-zA-Z0-9]*)\s*DecoratedSymbol(\.csv)?$");
+    static Regex patAccount = new Regex(@$"({orderPrefix})\s*([a-zA-Z0-9]*)\s*Account(\.csv)?$");
     static Regex patShares = new Regex(@$"({orderPrefix}) ?([- a-zA-Z0-9]*)\s*[sS]hares(\.csv)?$");
     static Regex patUnrealizedGains = new Regex(@$"({orderPrefix}) ?([- a-zA-Z0-9]*)\s*(Daily ?Change|IRR|Price|Shares|UnitCost|ProfitLoss(Dollar)?|NetLiquidValue|PortionOf(Total)?Account)(\.csv)?$");
     static Regex patHistory = new Regex(@"--[Hh]istoryDays=([0-9]+)");
@@ -578,7 +584,7 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
         return $"""
              <Worksheet ss:Name="{workSheetName}">
                <Names>            
-                <NamedRange ss:Name="_FilterDatabase" ss:RefersTo="={workSheetName}!R1C1:R{rowCount}C{columnCount}" ss:Hidden="1"/>
+                <NamedRange ss:Name="_FilterDatabase" ss:RefersTo="='{workSheetName}'!R1C1:R{rowCount}C{columnCount}" ss:Hidden="1"/>
                </Names>
                <Table ss:ExpandedColumnCount="{columnCount}" ss:ExpandedRowCount="{rowCount}" x:FullColumns="1" x:FullRows="1" ss:DefaultColumnWidth="42" ss:DefaultRowHeight="11.25">
                  {string.Join("", xmlColumnWidths)}
@@ -730,8 +736,9 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
         AutoMultiDimSortedDictionary<string, AutoMultiDimSortedDictionary<string, AutoMultiDimSortedDictionary<DateTime, AutoInitSortedDictionary<string, string>>>> mapFileNameToSymbolToDatesToAttributes, 
         SortedDictionary<string, SymbolInList> comparisonGrid, SortedDictionary<string, int> mapFileNameToColumnPosition, SortedDictionary<string, string> mapFileNameToFileNameNoExt, AutoMultiDimSortedDictionary<string, AutoInitSortedDictionary<string, SortedSet<DateTime>>> mapSymbolToFileNameToDates, StringBuilder sbXMLWorksheetRows, StringBuilder sbCSV, bool debug, ref int rowCount, ref int columnCurrent, AutoInitSortedDictionary<string, ExcelStyle> excelStyles, SortedSet<string> fileNamesWithHistory, int columnCount, DateTime[] historyDirectoryDateArray, Dictionary<string, (bool tip, string displayName, Func<string, string> convert)> mapAttributeNameToScreenTip, (string orderBy, string colorCodedAttributeName) workSheet)
     {
-        foreach (var symbol in comparisonGrid.Keys.Where(s => !string.IsNullOrEmpty(s)))
+        foreach (var equitySymbol in comparisonGrid.Keys.Where(s => !string.IsNullOrEmpty(s)))
         {
+            var symbol= equitySymbol;
             columnCurrent = 0;
 
             sbXMLWorksheetRows.AppendLine("""  <Row ss:AutoFitHeight="0">""");
@@ -760,6 +767,10 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
                     skipOverBlankColumn = false;
                     var matchNotes = patNotes.Match(fileName);
                     var matchUnrealizedGains = patUnrealizedGains.Match(fileName);
+                    var matchGroups = patGroup.Match(fileName);
+                    var matchGroupSymbol = patSymbolName.Match(fileName);
+                    var matchDecoratedSymbol = patDecoratedSymbol.Match(fileName);
+                    var matchAccounts = patAccount.Match(fileName);
                     var latest = mapFileNameToSymbolToDatesToAttributes[fileName][symbol].Keys.OrderByDescending(d => d).ToArray<DateTime>()[0];
                     var first = mapFileNameToSymbolToDatesToAttributes[fileName][symbol].Keys.FirstOrDefault();
                     if (matchNotes.Success)
@@ -771,6 +782,27 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
                         var line = $"""    <Cell{skipToIndex}><ss:Data ss:Type="String" xmlns="http://www.w3.org/TR/REC-html40">{notes}</ss:Data><NamedCell ss:Name="_FilterDatabase"/></Cell><!-- col={columnCurrent} fn={fileName}-->""";
                         sbXMLWorksheetRows.AppendLine(line);
                     }
+                    else if (matchGroupSymbol.Success)
+                    {
+                       var stock = mapFileNameToSymbolToDatesToAttributes[fileName][symbol][latest];
+                       var symbolName = stock["SymbolName"];
+                       var line = $"""    <Cell{skipToIndex}><Data ss:Type="String">{symbolName}</Data><NamedCell ss:Name="_FilterDatabase"/></Cell><!-- col={columnCurrent} fn={fileName}-->""";
+                       sbXMLWorksheetRows.AppendLine(line);
+                    }
+                    else if (matchAccounts.Success)
+                    {
+                        var stock = mapFileNameToSymbolToDatesToAttributes[fileName][symbol][latest];
+                        var account = stock["Account"];
+                        var line = $"""    <Cell{skipToIndex}><Data ss:Type="String">{account}</Data><NamedCell ss:Name="_FilterDatabase"/></Cell><!-- col={columnCurrent} fn={fileName}-->""";
+                        sbXMLWorksheetRows.AppendLine(line);
+                    }
+                    else if (matchGroups.Success)
+                    {
+                        var stock = mapFileNameToSymbolToDatesToAttributes[fileName][symbol][latest];
+                        var group = stock["Group"];
+                        var line = $"""    <Cell{skipToIndex}><Data ss:Type="String">{group}</Data><NamedCell ss:Name="_FilterDatabase"/></Cell><!-- col={columnCurrent} fn={fileName}-->""";
+                        sbXMLWorksheetRows.AppendLine(line);
+                    }
                     else if (matchUnrealizedGains.Success)
                     {
                         var name = matchUnrealizedGains.Groups[3].Value;
@@ -779,11 +811,11 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
                         var style = "";
                         if ("ProfitLoss" == name || "PortionOfTotalAccount" == name || name == "DailyChange" || name == "IRR")
                         {
-                            if(sharesOrProfitLossOrUnitCost.IndexOf("$") >= 0)
+                            if (sharesOrProfitLossOrUnitCost.IndexOf("$") >= 0)
                             {
-                                sharesOrProfitLossOrUnitCost=sharesOrProfitLossOrUnitCost = sharesOrProfitLossOrUnitCost.Replace("$", "");
+                                sharesOrProfitLossOrUnitCost = sharesOrProfitLossOrUnitCost.Replace("$", "");
                             }
-                            var val = +(double.Parse(sharesOrProfitLossOrUnitCost) / 100);
+                            var val = +(double.Parse(sharesOrProfitLossOrUnitCost=="-"?"0": sharesOrProfitLossOrUnitCost) / 100);
                             sharesOrProfitLossOrUnitCost = val.ToString();
                             if (val < -0.08)
                             {
@@ -800,7 +832,7 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
                         }
                         else if ("NetLiquidValue" == name || "Price" == name || "ProfitLossDollar" == name)
                         {
-                            double val = ParseDouble(sharesOrProfitLossOrUnitCost,fileName);
+                            double val = ParseDouble(sharesOrProfitLossOrUnitCost, fileName);
                             if (val < 0)
                                 style = " ss:StyleID=\"s74\"";
                             else
@@ -810,7 +842,13 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
                         sbXMLWorksheetRows.AppendLine(line);
                     }
                     else
-                    {
+                    {  
+                        var displaySymbol = symbol;
+                        if (matchDecoratedSymbol.Success)
+                        {
+                            var stock = mapFileNameToSymbolToDatesToAttributes[fileName][symbol][latest];
+                            displaySymbol = stock["DecoratedSymbol"];  // decorated symbols are color coded and have a prefix metric so you can sort by the metric (such as days until earnings)
+                        }
                         // The most recent csv files are in the Download directory.
                         // Older copies of the files are in sub-directories of the Download directory whose names contains the date.
                         // For the first time thru the loop we fetch the most recent file and that is not in a history directory yet so we don't compare the dates (yet).
@@ -868,13 +906,14 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
                         {
                             var metric = 1.0 * age / (BACK_HISTORY_COUNT + 1);
                             metric = Math.Log(metric * (BACK_HISTORY_COUNT + 1)) / Math.Log(BACK_HISTORY_COUNT + 1);
-                            if (     workSheet.colorCodedAttributeName == "Ind Group Rank") ColorCodeBy_Ind_Group_Rank(attributeTable);
-                            else if (workSheet.colorCodedAttributeName == "Comp Rating")    ColorCodeBy_Comp_Rating(attributeTable, "Comp Rating");
-                            else if (workSheet.colorCodedAttributeName == "RS Rating")      ColorCodeBy_Comp_Rating(attributeTable, "RS Rating");
-                            else if (workSheet.colorCodedAttributeName == "EPS Rating")     ColorCodeBy_Comp_Rating(attributeTable, "EPS Rating");
-                            else if (workSheet.colorCodedAttributeName == "Up/Down Vol")    ColorCodeBy_Metric(attributeTable, "Up/Down Vol");  //ColorCodeBy_UpDown_Rating(attributeTable, "Up/Down Vol");
-                            else if (workSheet.colorCodedAttributeName == "ROE")            ColorCodeBy_Metric(attributeTable, "ROE");
-                            else if (workSheet.colorCodedAttributeName == "Price % Chg")         ColorCodeBy_Metric(attributeTable, "Price % Chg");
+                            // @@todo@@: replace this with a Dictionary<string, Func<AutoInitSortedDictionary<string, string>, string>> so we can add new color coding metrics easily
+                            if (workSheet.colorCodedAttributeName == "Ind Group Rank") ColorCodeBy_Ind_Group_Rank(attributeTable);
+                            else if (workSheet.colorCodedAttributeName == "Comp Rating") ColorCodeBy_Comp_Rating(attributeTable, "Comp Rating");
+                            else if (workSheet.colorCodedAttributeName == "RS Rating") ColorCodeBy_Comp_Rating(attributeTable, "RS Rating");
+                            else if (workSheet.colorCodedAttributeName == "EPS Rating") ColorCodeBy_Comp_Rating(attributeTable, "EPS Rating");
+                            else if (workSheet.colorCodedAttributeName == "Up/Down Vol") ColorCodeBy_Metric(attributeTable, "Up/Down Vol");  //ColorCodeBy_UpDown_Rating(attributeTable, "Up/Down Vol");
+                            else if (workSheet.colorCodedAttributeName == "ROE") ColorCodeBy_Metric(attributeTable, "ROE");
+                            else if (workSheet.colorCodedAttributeName == "Price % Chg") ColorCodeBy_Metric(attributeTable, "Price % Chg");
                             else if (workSheet.colorCodedAttributeName == "Daily Closing Range") ColorCodeBy_Metric(attributeTable, "Daily Closing Range");
                             else if (workSheet.colorCodedAttributeName == "Weekly Closing Range") ColorCodeBy_Metric(attributeTable, "Weekly Closing Range");
                             else if (workSheet.colorCodedAttributeName == "Market Cap (mil)") ColorCodeBy_MarketCap(attributeTable, "Market Cap (mil)");
@@ -935,28 +974,28 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
                         }
                         var seqNoAndSymbol = "";
                         if (fileName.Contains("IBD 50 Index")) // special case because this list is always in the same order
-                            seqNoAndSymbol = $"{mapFileNameToSymbolToDatesToAttributes[fileName][symbol][latest]["seq"]} {symbol}";
+                            seqNoAndSymbol = $"{mapFileNameToSymbolToDatesToAttributes[fileName][symbol][latest]["seq"]} {displaySymbol}";
                         else if (string.IsNullOrEmpty(workSheet.orderBy) || workSheet.orderBy.ToLower() == "symbol")
-                            seqNoAndSymbol = symbol;
+                            seqNoAndSymbol = displaySymbol;
                         else if (workSheet.orderBy == "age")
-                            seqNoAndSymbol = $"{age.ToString("000")} {symbol}";
+                            seqNoAndSymbol = $"{age.ToString("000")} {displaySymbol}";
                         else
                         {
                             var attrValue = mapFileNameToSymbolToDatesToAttributes[fileName][symbol][latest][workSheet.orderBy];
                             if (!string.IsNullOrEmpty(attrValue) && mapAttributeNametoAttributeAttributes.ContainsKey(workSheet.orderBy) && mapAttributeNametoAttributeAttributes[workSheet.orderBy].numeric && mapAttributeNametoAttributeAttributes[workSheet.orderBy].orderByConvert != null)
                             {
                                 attrValue = mapAttributeNametoAttributeAttributes[workSheet.orderBy].orderByConvert(attrValue, workSheet.orderBy);
-                                seqNoAndSymbol = $"{attrValue} {symbol}";
+                                seqNoAndSymbol = $"{attrValue} {displaySymbol}";
                             }
                             else if (Int32.TryParse(attrValue ?? "999", out int attr1))
-                                seqNoAndSymbol = $"{attr1.ToString("000")} {symbol}";
+                                seqNoAndSymbol = $"{attr1.ToString("000")} {displaySymbol}";
                             else if (double.TryParse(attrValue ?? "  0.00", out double attr2))
-                                seqNoAndSymbol = $"{attr2.ToString((attr2 < 0 ? "" : " ") + "   0.00")} {symbol}";
+                                seqNoAndSymbol = $"{attr2.ToString((attr2 < 0 ? "" : " ") + "   0.00")} {displaySymbol}";
                             else
-                                seqNoAndSymbol = $"999 {symbol}";
+                                seqNoAndSymbol = $"999 {displaySymbol}";
                         }
                         //if (orderBy == "age" && symbol == "SPXC" && fileName == "RS Line Blue Dot.csv")  WriteLine($"symbol={symbol} age={age} seqNoAndSymbol={seqNoAndSymbol} attributes={attributes}");
-                        var HRef= fileName.Contains("Group.")?"": $"ss:HRef=\"https://marketsmith.investors.com/mstool?Symbol={symbol}&amp;Periodicity=Daily&amp;InstrumentType=Stock&amp;Source=sitemarketcondition&amp;AlertSubId=8241925&amp;ListId=0&amp;ParentId=0\"";
+                        var HRef = fileName.Contains("Group.") ? "" : $"ss:HRef=\"https://marketsmith.investors.com/mstool?Symbol={displaySymbol}&amp;Periodicity=Daily&amp;InstrumentType=Stock&amp;Source=sitemarketcondition&amp;AlertSubId=8241925&amp;ListId=0&amp;ParentId=0\"";
                         var cell = $"""    <Cell{skipToIndex} ss:StyleID="{styleName2}" {HRef} x:HRefScreenTip="{screenTip}"><Data ss:Type="String">{seqNoAndSymbol}</Data><NamedCell ss:Name="_FilterDatabase"/></Cell><!-- col={columnCurrent} fn={fileName}--> """;
                         sbXMLWorksheetRows.AppendLine(cell);
                     }
@@ -1352,6 +1391,8 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
         {30, new AttributeAttributes("21 Day ATR %"            , true , false, "21 Day ATR %"        ,e=>e, (e,_)=>{ if(string.IsNullOrEmpty(e)) e= ""; else if(e!="-") e= ""+(Double.Parse(e)*10);  return FormatPercentFloat(e,_); }, 100, 0) }, // instead of displaying a decimal point which takes up room, just multiply by 10 instead
         {31, new AttributeAttributes("30 Day ATR %"            , true , false, "30 Day ATR %"        ,e=>e, FormatPercentFloat, 100, 0) },
         {32, new AttributeAttributes("50 Day ATR %"            , true , false, "50 Day ATR %"        ,e=>e, FormatPercentFloat, 100, 0) },
+        {33, new AttributeAttributes("Account"                 , false, false, "Account"             ,e=>e, null) },
+        {34, new AttributeAttributes("Group"                   , false, false, "Group"               ,e=>e, null) }
 
     };
     static string FormatDollarVolume(string e, string M ="")
@@ -1444,9 +1485,12 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
             //csv.Configuration.HasHeaderRecord = false;
 
             var isNotesFileName = patNotes.Match(fileName);
-            var isSymbolFileName = patSymbol.Match(fileName);
+            var isSymbolFileName = patSymbolName.Match(fileName);
             var isUnrealizedGainName = patUnrealizedGains.Match(fileName);
-            //WriteLine($"f={fileName} {isUnrealizedGainName}");
+            var isSchwabGroupFileName = patGroup.Match(fileName);
+            var isAccountFileName = patAccount.Match(fileName);
+            var isDecoratedSymbolFileName = patDecoratedSymbol.Match(fileName);
+            //isAccountFileName = new Regex(@$"({orderPrefix})\s*([a-zA-Z0-9]*)\s*Account(\.csv)?$").Match(fileName);
             var result = new AutoInitSortedDictionary<string, string>();
             var count = 0;
             while (csv.Read())
@@ -1458,8 +1502,31 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
                     var notes = "";
                     var symbol = csv.GetField<string>("Symbol");
                     symbol = symbol is null ? "" : symbol.Trim();
+                    var symbolOnly = symbol.Split(':').Reverse().FirstOrDefault(); // accommodate Think or Swim group prefix
                     //if(!isNotesFileName.Success)
                     result = new AutoInitSortedDictionary<string, string>(); // In notes files we can have multiple lines for the same symbol so we use the same results
+                    if(isSchwabGroupFileName.Success)
+                    {
+                        var groupName = csv.GetField<string>("Group");
+                        result.Add("Group", groupName);
+                    }
+                    else if (isAccountFileName.Success)
+                    {
+                        var accountName = csv.GetField<string>("Account").ToUpper();
+                        result.Add("Account", accountName);
+                    }
+                    else if (isSymbolFileName.Success)
+                    {
+                        var symbolName = csv.GetField<string>("SymbolName");
+                        result.Add("SymbolName", symbolName);
+                    }
+                    else if (isDecoratedSymbolFileName.Success)
+                    {
+                        var decoratedSymbolName = csv.GetField<string>("DecoratedSymbol");
+                        result.Add("DecoratedSymbol", decoratedSymbolName);
+                    }
+
+
                     if (isUnrealizedGainName.Success)
                     {
                         name = isUnrealizedGainName.Groups[3].Value;
@@ -1468,7 +1535,7 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
                     }
                     else if (isSymbolFileName.Success)
                     {
-                        name = isSymbolFileName.Groups[2].Value;                        
+                        name = isSymbolFileName.Groups[2].Value;
                         result.Add(name, symbol);
                     }
                     else if (isNotesFileName.Success)
@@ -1533,7 +1600,7 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
                             }
                         }
                     }
-                    else // this is a stock list (as opposed to a profit loss notes file)
+                    else // this is a stock list (as opposed to a profit loss or notes file)
                     {
                         //var Symbol = csv.GetField<string>("Symbol");
                         //WriteLine($"---------- Begin {Symbol} in {fileName}-------------------");
@@ -1542,18 +1609,24 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
                         if (isNullEventDate || ValidEventDate(listDateTime, eventDate, maxEventAge)) // Events for today only, skip old events
                         {
                             if (defaultValues != null)
-                            {
-                                var symbolOnly = symbol.Split(':').Reverse().FirstOrDefault(); // accommodate Think or Swim group prefix
+                            {                                
                                 if (defaultValues.ContainsKey(symbolOnly))
                                 {
                                     if (defaultValues[symbolOnly] != null)
                                     {
                                         var defaultValuesForSymbol = defaultValues[symbolOnly];
-                                        if (defaultValuesForSymbol.ContainsKey(listDateTime.Date))
-                                        {
-                                            if (defaultValues[symbolOnly][listDateTime.Date] != null)
+                                        // If the market is open and has not closed yet (it is before 1pm PST), use default values from the previous day if they are not available for the current day.
+                                        var weHaveDefaultDataForToday = defaultValuesForSymbol.ContainsKey(listDateTime.Date);
+                                        var weHaveDefaultDataForYesterday = defaultValuesForSymbol.ContainsKey(listDateTime.AddHours(-13).Date);
+                                        var ldt = listDateTime;
+                                        if(!weHaveDefaultDataForToday && weHaveDefaultDataForYesterday )
+                                            ldt = listDateTime.AddHours(-13);
+                                        var weHaveDefaultData = weHaveDefaultDataForToday || weHaveDefaultDataForYesterday;
+                                        if (weHaveDefaultData/*weHaveDefaultDataForToday*/)
+                                        {                                        
+                                            if (defaultValues[symbolOnly][ldt.Date] != null)
                                             {
-                                                foreach (var (key, val) in defaultValues[symbolOnly][listDateTime.Date])
+                                                foreach (var (key, val) in defaultValues[symbolOnly][ldt.Date])
                                                 {
                                                     if (!result.ContainsKey(key))
                                                     {
@@ -1581,23 +1654,27 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
                                     {
                                         if (string.IsNullOrEmpty(attrValue) || attrValue == "-")
                                         {
-                                            if(!result.ContainsKey("Days to Earnings")) 
+                                            if (!result.ContainsKey("Days to Earnings"))
                                                 result.Add("Days to Earnings", "999");
-                                            if(!result.ContainsKey(attrNameAndType.name)) 
+                                            if (!result.ContainsKey(attrNameAndType.name))
                                                 result.Add(attrNameAndType.name, attrValue);
                                         }
                                         else
                                         {
                                             var earningsDate = DateTime.Parse(attrValue);
-                                            var daysUntilEarnings = (earningsDate - DateTime.Now).TotalDays+1;
-                                            if(!result.ContainsKey("Days to Earnings"))
+                                            var daysUntilEarnings = (earningsDate - DateTime.Now).TotalDays + 1;
+                                            if (daysUntilEarnings < 0)
+                                            {
+                                                daysUntilEarnings = 365+daysUntilEarnings;
+                                            }
+                                            if (!result.ContainsKey("Days to Earnings"))
                                                 result.Add("Days to Earnings", ((long)(daysUntilEarnings + 0.5)).ToString());
                                             attrValue = earningsDate.ToString("yyyy-MM-dd ddd");
-                                            if(!result.ContainsKey(attrNameAndType.name))
+                                            if (!result.ContainsKey(attrNameAndType.name))
                                                 result.Add(attrNameAndType.name, attrValue);
-                                            if(!result.ContainsKey("seq"))
+                                            if (!result.ContainsKey("seq"))
                                                 result.Add("seq", (count - 1).ToString("00")); // this is for lists like IBD 50 where the order is important
-                                            if(!result.ContainsKey(attrNameAndType.displayName))
+                                            if (!result.ContainsKey(attrNameAndType.displayName))
                                                 result.Add(attrNameAndType.displayName, attrNameAndType.convert(attrValue));
                                         }
                                     }
@@ -1622,8 +1699,8 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
                                 }
                             }
                             //if(!result.ContainsKey("seq"))
-                                result["seq"]= (count - 1).ToString("00"); // this is for lists like IBD 50 where the order is important
-                            if(!result.ContainsKey("Updated"))
+                            result["seq"] = (count - 1).ToString("00"); // this is for lists like IBD 50 where the order is important
+                            if (!result.ContainsKey("Updated"))
                                 result.Add("Updated", new FileInfo(fileName).LastWriteTime.ToString("ddd MMM dd yy"));
                         }
                         else
@@ -1631,27 +1708,33 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
                             //WriteLine($"skipping eventDate={eventDate}");
                         }
                     }
-                    if (skip)
+                    var symbols = /*symbol==symbolOnly*/ true ? new[] { symbol } : new[] { symbol, symbolOnly };
+                    foreach (var sym in symbols)
                     {
-                        if (debug1) WriteLine($"adding row SKIP    [{symbol}][{listDateTime}] from file={fileName}");
-                    }
-                    else if (rows.ContainsKey(symbol) && rows[symbol].ContainsKey(listDateTime))
-                    {
-                        foreach ((var key, var val) in result)
+                        if(string.IsNullOrEmpty(sym))  continue;                        
+                        if (skip)
                         {
-                            rows[symbol][listDateTime][key] = rows[symbol][listDateTime][key] + "&#10;" + val;
+                            if (debug1) WriteLine($"adding row SKIP    [{sym}][{listDateTime}] from file={fileName}");
                         }
-                    }
-                    else
-                    {
-                        try
+                        else if (rows.ContainsKey(sym) && rows[sym].ContainsKey(listDateTime))
                         {
-                            rows[symbol][listDateTime] = result;
-                            if (debug1) WriteLine($"adding row         [{symbol}][{listDateTime}] from file={fileName}");
+                            foreach ((var key, var val) in result)
+                            {
+                                rows[sym][listDateTime][key] = rows[sym][listDateTime][key] + "&#10;" + val;
+                            }
                         }
-                        catch (System.ArgumentException)
+                        else
                         {
-                            rows[symbol][listDateTime][$"{name}Notes"] = notes + "&#10;" + rows[symbol][listDateTime][$"{name}Notes"];
+                            try
+                            {
+                                rows[sym][listDateTime] = result;
+                                if (debug1) WriteLine($"adding row         [{sym}][{listDateTime}] from file={fileName}");
+                            }
+                            catch (System.ArgumentException)
+                            {
+                                rows[sym][listDateTime][$"{name}Notes"] = notes + "&#10;" + rows[sym][listDateTime][$"{name}Notes"];
+                                if(debug1) WriteLine($"appending row         [{sym}][{listDateTime}][{name}Notes] notes={notes} from file={fileName}");
+                            }
                         }
                     }
                 }
