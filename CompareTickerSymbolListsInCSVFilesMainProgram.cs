@@ -7,6 +7,30 @@ using CsvHelper;
 using static System.Console;
 using static System.Environment;
 using static System.Math;
+
+
+// Sample contents of formula file called "ttt SellSignalMCP Formulas.csv""
+//
+// Symbol,Date,Formulas
+// AAPL, 2025/03/16, =(RC[-8]-RC[-4])/(RC[-8]/(1+RC[22]/100)-RC[-4])
+// AMZN, 2025/03/16, =(RC[-8]-RC[-4])/(RC[-8]/(1+RC[22]/100)-RC[-4])
+// ARM,  2025/03/16, =(RC[-8]-RC[-4])/(RC[-8]/(1+RC[22]/100)-RC[-4])
+// AVGO, 2025/03/16, =(RC[-8]-RC[-4])/(RC[-8]/(1+RC[22]/100)-RC[-4])
+// BKNG, 2025/03/16, =(RC[-8]-RC[-4])/(RC[-8]/(1+RC[22]/100)-RC[-4])
+// META, 2025/03/16, =(RC[-8]-RC[-4])/(RC[-8]/(1+RC[22]/100)-RC[-4])
+// MPLX, 2025/03/16, =(RC[-8]-RC[-4])/(RC[-8]/(1+RC[22]/100)-RC[-4])
+// MSFT, 2025/03/16, =(RC[-8]-RC[-4])/(RC[-8]/(1+RC[22]/100)-RC[-4])
+// NFLX, 2025/03/16, =(RC[-8]-RC[-4])/(RC[-8]/(1+RC[22]/100)-RC[-4])
+// NVDA, 2025/03/16, =(RC[-8]-RC[-4])/(RC[-8]/(1+RC[22]/100)-RC[-4])
+// PANW, 2025/03/16, =(RC[-8]-RC[-4])/(RC[-8]/(1+RC[22]/100)-RC[-4])
+// PLTR, 2025/03/16, =(RC[-8]-RC[-4])/(RC[-8]/(1+RC[22]/100)-RC[-4])
+// RACE, 2025/03/16, =(RC[-8]-RC[-4])/(RC[-8]/(1+RC[22]/100)-RC[-4])
+// SE,   2025/03/16, =(RC[-8]-RC[-4])/(RC[-8]/(1+RC[22]/100)-RC[-4])
+// SFM,  2025/03/16, =(RC[-8]-RC[-4])/(RC[-8]/(1+RC[22]/100)-RC[-4])
+// SPHQ, 2025/03/16, =(RC[-8]-RC[-4])/(RC[-8]/(1+RC[22]/100)-RC[-4])
+// TSM,  2025/03/16, =(RC[-8]-RC[-4])/(RC[-8]/(1+RC[22]/100)-RC[-4])
+
+
 record AttributeAttributes(string name, bool numeric, bool screenTip, string displayName, Func<string, string> convert, Func<string, string, string>? orderByConvert, double max = double.MinValue, double min=double.MaxValue);
 class DescendingComparer<T> : IComparer<T> where T : IComparable<T>
 {
@@ -67,6 +91,7 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
          "Top Rated Stocks.csv",
          "ETF Indicies.csv",
          "Top Sectors ETFs.csv",
+         "Near Pivot.csv"
     };
     static SortedSet<string> confidential = new SortedSet<string>(){
         "ttt ML Holdings ProfitLossDollar.csv",
@@ -84,7 +109,7 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
     static Regex patGotoRow = new Regex("^--GotoRow=([0-9]+)$");
     //static Regex patSymbol = new Regex(@$"({orderPrefix})([a-zA-Z0-9]*)\s*Symbol(\.csv)?$");
     //[GeneratedRegex(@"zzz([a-zA-Z0-9]*)Notes(\.csv)?$")]
-    static Regex patNotes = new Regex(@$"({orderPrefix})([a-zA-Z0-9]*)\s*Notes(\.csv)?$");
+    static Regex patNotes = new Regex(@$"({orderPrefix})\s*([a-zA-Z0-9]+)\s*(Notes|Comments|Formulas)(\.csv)?$");
     static Regex patGroup = new Regex(@$"({orderPrefix})\s*([a-zA-Z0-9]*)\s*Group(\.csv)?$");
     static Regex patSymbolName = new Regex(@$"({orderPrefix})\s*([a-zA-Z0-9]*)\s*SymbolName(\.csv)?$");
     static Regex patDecoratedSymbol = new Regex(@$"({orderPrefix})\s*([a-zA-Z0-9]*)\s*DecoratedSymbol(\.csv)?$");
@@ -776,10 +801,15 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
                     if (matchNotes.Success)
                     {
                         var name = matchNotes.Groups[2].Value;
+                        var formulas = matchNotes.Success ? matchNotes.Groups[3].Value == "Formulas" : false;
                         var stock = mapFileNameToSymbolToDatesToAttributes[fileName][symbol][latest];
-                        var notes = stock[$"{name}Notes"];
+                        var notes = stock[$"{name}Notes"]; // notes may contain a single comment, a single formula, or multiple notes
                         notes = patDateTime_ddd_MMM_dd_YYYY_ddd_MMM_dd_YYYY.Replace(notes, m => m.Groups[6].Value); // remove the date of data entry and leave the date of the data (report)   
-                        var line = $"""    <Cell{skipToIndex}><ss:Data ss:Type="String" xmlns="http://www.w3.org/TR/REC-html40">{notes}</ss:Data><NamedCell ss:Name="_FilterDatabase"/></Cell><!-- col={columnCurrent} fn={fileName}-->""";
+                        notes = notes.Trim();
+                        var line = formulas ?
+                            $"""    <Cell{skipToIndex} ss:Formula="{notes}" ss:StyleID="s70"><NamedCell ss:Name="_FilterDatabase"/></Cell><!-- col={columnCurrent} fn={fileName}-->""" 
+                            : 
+                            $"""    <Cell{skipToIndex}><ss:Data ss:Type="String" xmlns="http://www.w3.org/TR/REC-html40">{notes}</ss:Data><NamedCell ss:Name="_FilterDatabase"/></Cell><!-- col={columnCurrent} fn={fileName}-->""" ;
                         sbXMLWorksheetRows.AppendLine(line);
                     }
                     else if (matchGroupSymbol.Success)
@@ -1233,7 +1263,9 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
             var match = patFileExtension.Match(fileNameWithoutOptionalPrefix);
             var fileNameWithOutExtension = match.Success ? match.Groups[1].Value : Path.GetFileName(fileName);
             var m = patNotes.Match(fileName);
-            if (m.Success)
+            var comments = m.Success ? m.Groups[3].Value == "Comments" : false;
+            var formulas = m.Success ? m.Groups[3].Value == "Formulas" : false;
+            if (m.Success && !(comments|formulas))
             {
                 xmlColumnWidths.Add($"""<Column ss:Width="{NoteColumnWidth}" />""");
             }
@@ -1485,6 +1517,8 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
             //csv.Configuration.HasHeaderRecord = false;
 
             var isNotesFileName = patNotes.Match(fileName);
+            var isCommentsFileName = isNotesFileName.Success ? isNotesFileName.Groups[3].Value == "Comments" : false;
+            var isFormulasFileName = isNotesFileName.Success ? isNotesFileName.Groups[3].Value == "Formulas" : false;
             var isSymbolFileName = patSymbolName.Match(fileName);
             var isUnrealizedGainName = patUnrealizedGains.Match(fileName);
             var isSchwabGroupFileName = patGroup.Match(fileName);
@@ -1542,13 +1576,14 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
                     {
                         var noteDaysOld = 0.0;
                         name = isNotesFileName.Groups[2].Value;
+                        var isFormulas = isNotesFileName.Success ? isNotesFileName.Groups[3].Value == "Formulas" : false;
                         var dateString = csv.GetField<string>("Date");
                         if (DateTime.TryParse(dateString, out DateTime date))
                         {
                             noteDaysOld = (TODAY - date).TotalDays;
                             dateString = date.ToString("ddd MMM dd, yy");
                         }
-                        var note = csv.GetField<string>("Notes");
+                        var note = csv.GetField<string>(isFormulas?"Formulas":"Notes"); // note can contain comment, formulas, or note
                         note = convertPunctuationsToXML(note, patRestoreCommas, ",");
                         note = convertPunctuationsToXML(note, patRestoreNewLines, "&#10;");
                         if (!fileName.Contains("TRADE"))
@@ -1558,8 +1593,8 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
                                 {
                                     note = pat.Replace(note, replace);
                                 }
-                            }
-                        notes = dateString + ": " + note;
+                            }                        
+                        notes = ((isCommentsFileName|isFormulasFileName)? "" : dateString + ": ") + note;// leave that date out of comments so they will take up less room
                         // Separate multiple notes with a new line
                         //var newline = result.ContainsKey($"{name}Notes") ? "&#10;" : "";
                         if (result.ContainsKey($"{name}Notes"))
