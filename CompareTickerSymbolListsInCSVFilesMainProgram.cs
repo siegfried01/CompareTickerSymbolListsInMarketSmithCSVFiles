@@ -1,9 +1,9 @@
-﻿using System.Diagnostics;
+﻿using CompareTickerSymbolListsInCSVFiles;
+using CsvHelper;
+using System.Diagnostics;
 using System.Globalization;
 using System.Text;
 using System.Text.RegularExpressions;
-using CompareTickerSymbolListsInCSVFiles;
-using CsvHelper;
 using static System.Console;
 using static System.Environment;
 using static System.Math;
@@ -56,9 +56,9 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
     }
     static SortedSet<string> preferredFiles = new SortedSet<string>() {
          "Accelerating Leaders.csv",
-         "Additions.csv",
+         //"Additions.csv",
          "All RS Line New High.csv",
-         "Deletions.csv",
+         //"Deletions.csv",
          "Established Downtrend.csv",
          "Extended Stocks.csv",
          "IBD Big Cap 20.csv",
@@ -74,9 +74,11 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
          "Large Cap.csv",
          "Long Term Leaders Watch.csv",
          "Long Term Leaders.csv",
-         "Merrill-Holdings-IRR.csv",
-         "Merrill-Holdings-Unrealized-Gain-Loss-Summary.csv",
-         "Merrill-Holdings.csv",
+         "ETF Indicies.csv",
+         //"Top Sectors ETFs.csv",
+         //"Merrill-Holdings-IRR.csv",
+         //"Merrill-Holdings-Unrealized-Gain-Loss-Summary.csv",
+         //"Merrill-Holdings.csv",
          "Mid Cap.csv",
          "MinDollarVol10MComp50.csv",
          "MinDollarVol10MComp50ETF.csv",
@@ -85,13 +87,12 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
          "RS Line Blue Dot.csv",
          "RS Line New High.csv",
          "Small Cap.csv",
-         "ttt ML Holdings.csv",
-         //"Swadley Weeks Watch Uni.csv",
-         //"Swadley Watch Feb 26.csv",
+         //"ttt ML Holdings.csv",
          "Top Rated Stocks.csv",
-         "ETF Indicies.csv",
-         "Top Sectors ETFs.csv",
-         "Near Pivot.csv"
+         //"ETF Indicies.csv",
+         //"Top Sectors ETFs.csv",
+         "Near Pivot.csv",
+         "Watch.csv",
     };
     static SortedSet<string> confidential = new SortedSet<string>(){
         "ttt ML Holdings ProfitLossDollar.csv",
@@ -99,6 +100,7 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
         "ttt ML Holdings NetLiquidValue.csv",
         "sss Schwab Shares.csv",
         "sss Schwab NetLiquidValue.csv",
+        "sss Schwab ProfitLossDollar.csv"
         };
     static string? envVarSkipConfidential = GetEnvironmentVariable("SKIPCONF");
     static bool skipConfidential = envVarSkipConfidential != null && envVarSkipConfidential.ToLower() == "true" ? true : false;
@@ -110,12 +112,13 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
     //static Regex patSymbol = new Regex(@$"({orderPrefix})([a-zA-Z0-9]*)\s*Symbol(\.csv)?$");
     //[GeneratedRegex(@"zzz([a-zA-Z0-9]*)Notes(\.csv)?$")]
     static Regex patNotes = new Regex(@$"({orderPrefix})\s*([a-zA-Z0-9]+)\s*(Notes|Comments|Formulas)(\.csv)?$");
-    static Regex patGroup = new Regex(@$"({orderPrefix})\s*([a-zA-Z0-9]*)\s*Group(\.csv)?$");
+    static Regex patGroup = new Regex(@$"({orderPrefix})\s*([a-zA-Z0-9]*)\s*(Group|Managed(By)?)(\.csv)?$");
     static Regex patSymbolName = new Regex(@$"({orderPrefix})\s*([a-zA-Z0-9]*)\s*SymbolName(\.csv)?$");
     static Regex patDecoratedSymbol = new Regex(@$"({orderPrefix})\s*([a-zA-Z0-9]*)\s*DecoratedSymbol(\.csv)?$");
     static Regex patAccount = new Regex(@$"({orderPrefix})\s*([a-zA-Z0-9]*)\s*Account(\.csv)?$");
     static Regex patShares = new Regex(@$"({orderPrefix}) ?([- a-zA-Z0-9]*)\s*[sS]hares(\.csv)?$");
-    static Regex patUnrealizedGains = new Regex(@$"({orderPrefix}) ?([- a-zA-Z0-9]*)\s*(Daily ?Change|IRR|Price|Shares|UnitCost|ProfitLoss(Dollar)?|NetLiquidValue|PortionOf(Total)?Account)(\.csv)?$");
+    static Regex patUnrealizedGains = new Regex(@$"({orderPrefix}) ?([- a-zA-Z0-9]*)\s*(Daily ?Change|IRR|Price|Shares|UnitCost|TotalCost|ProfitLoss(Dollar)?|NetLiquidValue|PortionOf(Total)?Account)(\.csv)?$");
+    static Regex patDailyChange = new Regex(@"Daily ?Change");
     static Regex patHistory = new Regex(@"--[Hh]istoryDays=([0-9]+)");
     static Regex patAddSpaceNotesSwitch = new Regex(@"^(.*)(Notes)$");
     static Regex patNoteColumnWidthSwitch = new Regex(@"--Note(Col(umn)?Width)?=([0-9]+)");
@@ -132,6 +135,7 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
     static string NoteColumnWidth = "400";
     static string SymbolColumnWidth = "37";//"32.75";
     static List<Regex> patSkipFiles = new List<Regex> {
+        new Regex(@"ttt (SellSignalMCP Formulas|SellSignal200DayMA Comments)\.csv"),
         new Regex(@"^MinDollarVol10MComp50(ETF)?\.csv$"),
         new Regex(@"^197 Industry Groups\.csv$"),
         new Regex(@"^All_Accounts_GainLoss_Realized(_Details)?_[0-9]+-[0-9]+.csv"),// Schwab TOS download
@@ -153,7 +157,7 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
         new Regex(@"^paper trading realized gain loss TOS \d+-\d+-\d+-AccountStatement\.csv$"),
         new Regex(@"Lot-Details\.csv$"),
         new Regex(@"^(Merril.*|SEP-IRA.*|paper trading.*|.*Ameritrade.*|197 Industry Groups|MinDollarVol[0-9]+MComp[0-9]+)\.csv$")};
-    static List<Regex> patSkipFilesMaterList = new List<Regex> { new Regex(@"^zzz.*\.csv$") };
+    static List<Regex> patSkipFilesMasterList = new List<Regex> { new Regex(@"^zzz.*\.csv$"), new Regex(@"^sss Schwab [A-Za-z0-9 ]+\.csv$") };
     static DateTime TODAY = System.DateTime.Today.AddHours(12);
     static bool SkipFile(string filePath)
     {
@@ -290,10 +294,11 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
             {
                 // skip, already handled
             }
+
             else if (arg  == "--masterList")
             {
                 generateMasterRegexList = true;
-                patSkipFiles.AddRange(patSkipFilesMaterList);
+                patSkipFiles.AddRange(patSkipFilesMasterList);
                 generateXML = false;
                 generateCSV = false;
             }
@@ -376,9 +381,15 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
             sbLegend.Append($"Sort by {worksheet.orderBy} {(string.IsNullOrEmpty(worksheet.colorCodedAttributeName) ? "" : $"-Color by {worksheet.colorCodedAttributeName}")}");
             sbLegend.Append("</Data></Cell></Row>\n");
         }
+        foreach(var (key, value) in flags)
+        {
+                sbLegend.Append("""<Row><Cell><Data ss:Type="String">""");
+                sbLegend.Append($"{key} = {value}");
+                sbLegend.Append("</Data></Cell></Row>\n");
+        }
         var legend=$"""
             <Worksheet ss:Name="Legend">
-             <Table ss:ExpandedColumnCount="1" ss:ExpandedRowCount="{workSheets.Count()}" x:FullColumns="1"
+             <Table ss:ExpandedColumnCount="1" ss:ExpandedRowCount="{workSheets.Count()+flags.Count()}" x:FullColumns="1"
               x:FullRows="1" ss:DefaultRowHeight="15">
               <Column ss:AutoFitWidth="0" ss:Width="417"/>
               {sbLegend.ToString()}
@@ -412,7 +423,7 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
             var rowCount = 0;
             columnCurrent = saveColumnCurrent;
             main.GenerateXMLWorksheetDataRows(backHistoryDayCount, 
-                main.mapFileNameToSymbolToDatesToAttributes, 
+                //main.mapFileNameToSymbolToDatesToAttributes, 
                 masterSymbolListForWorksheet, 
                 mapFileNameToColumnPosition, 
                 mapFileNameToFileNameNoExt, mapSymbolToFileNameToDates, sbXMLWorksheetRows, sbCSV, debug, ref rowCount, ref columnCurrent, excelStyles, fileNamesWithHistory, columnCount, historyDirectoryDateArray, mapAttributeNameToScreenTip, workSheet);
@@ -520,20 +531,148 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
             """";
 
             //WriteLine(worksheetXML);
-            try
+            var done = false;
+            while (!done)
             {
-                System.IO.File.WriteAllText(finalExcelOutputFilePath, workBookXML);
-            }
-            catch (Exception ex)
-            {
-                WriteLine($"{ex}");
-                var patVersion = new Regex(@"");
+                try
+                {
+                    System.IO.File.WriteAllText(finalExcelOutputFilePath, workBookXML);
+                    done = true;
+                }
+                catch (System.IO.IOException ex)
+                {
+                    finalExcelOutputFilePath = ExpandEnvironmentVariables(@$"%USERPROFILE%\Downloads\CompareMarketSmithLists_{DateTime.Now.ToString("yyyy-MMM-dd-ddd-HH-mm-ss")}.{(generateCSV || generateMasterRegexList ? "csv" : "xml")}");
+                    WriteLine($"Error writing file {ex.Message}, trying again with new file name {finalExcelOutputFilePath} sleeping...");
+                    Thread.Sleep(1000);
+                }
+                catch (Exception ex)
+                {
+                    WriteLine($"{ex}");
+                    done = true;
+                }
             }
             //WriteLine($"files processed={string.Join(",\n", mapFileNameToColumnPosition.Keys.Select(f=>$"@\"{f}\"").ToList())}");
             var excel = ExpandEnvironmentVariables(@"%MSOFFICE%\EXCEL.EXE");
             Process.Start(excel, $"/s \"{finalExcelOutputFilePath}\"");
+            // add Microsoft.Office.Interop.Excel.Application to this project
+            // add Microsoft.Office.Interop.Excel to the project references
+
+            // Excel COM Interop is missing DLLs. 
+            // https://stackoverflow.com/questions/32399420/could-not-load-file-or-assembly-office-version-15-0-0-0
+            /*
+            // start Microsoft Excel as an out-of-process COM object
+            var excel = new Microsoft.Office.Interop.Excel.Application();
+            // make Excel visible
+            excel.Visible = true;
+            var workbook = excel.Workbooks.Open(finalExcelOutputFilePath);
+            //SortMultipleWorksheets(workbook, excel);
+            // save as xlsx
+            workbook.SaveAs(finalExcelOutputFilePath, Microsoft.Office.Interop.Excel.XlFileFormat.xlOpenXMLWorkbook);
+            // close the workbook
+            workbook.Close();
+            */
+
         }
     }
+
+    //private static bool SortMultipleWorksheets(Microsoft.Office.Interop.Excel.Workbook workbook, Microsoft.Office.Interop.Excel.Application excel)
+    //{
+    //    excel.Visible = true;
+    //    // get the list of worksheets
+    //    var worksheets = workbook.Worksheets;
+    //    // loop through the worksheets
+    //    foreach (Microsoft.Office.Interop.Excel.Worksheet worksheet in worksheets)
+    //    {
+    //        // get the name of the worksheet
+    //        var worksheetName = worksheet.Name;
+    //        // check if the worksheet name is "Legend"
+    //        if (worksheetName == "2. Sort by Price % Chg-ColorByD")
+    //        {
+    //            // set the worksheet to be the active sheet
+    //            worksheet.Activate();
+    //            // set the zoom level to 100%
+    //            excel.ActiveWindow.Zoom = 100;
+    //            // set the view to be normal
+    //            excel.ActiveWindow.View = Microsoft.Office.Interop.Excel.XlWindowView.xlNormalView;
+    //            // get the range of cells in the worksheet
+    //            var range = worksheet.UsedRange;
+    //            // get the list of data filters
+    //            var filters = worksheet.AutoFilter;
+    //            // get the number of rows and columns in the worksheet
+    //            var rows = range.Rows.Count;
+    //            var columns = range.Columns.Count;
+    //            // get the values of all of the cells in the first row
+    //            var values = range.Cells[1, 1] as Microsoft.Office.Interop.Excel.Range;
+    //            // find all the cells in the first row that contain text values beginning with "Schwab"
+    //            var cells = worksheet.Cells[1, 1] as Microsoft.Office.Interop.Excel.Range;
+    //            // Find all the cells in the first row that contain text values beginning with "Schwab"
+    //            SortWorkSheet(excel, worksheet, cells, "Watch");
+    //        }
+    //    }
+
+    //    return true;
+    //}
+
+    //private static bool SortWorkSheet(Microsoft.Office.Interop.Excel.Application excel, Microsoft.Office.Interop.Excel.Worksheet worksheet, Microsoft.Office.Interop.Excel.Range? cells, object searchPattern)
+    //{
+    //    var found = false;
+    //    var done = false;
+    //    while (!done)
+    //    {
+    //        try
+    //        {
+    //            // find the first cell that contains "Schwab"
+    //            var cell = cells.Find(
+    //                searchPattern,
+    //                Type.Missing,
+    //                Type.Missing,
+    //                Microsoft.Office.Interop.Excel.XlLookAt.xlPart,
+    //                Microsoft.Office.Interop.Excel.XlSearchOrder.xlByRows,
+    //                Microsoft.Office.Interop.Excel.XlSearchDirection.xlNext,
+    //                false,
+    //                Type.Missing,
+    //                Type.Missing
+    //            );
+    //            // if a cell was found, select it
+    //            if (cell != null)
+    //            {
+    //                found = true;
+    //                cell.Select();
+    //                // set the zoom level to 100%
+    //                excel.ActiveWindow.Zoom = 100;
+    //                // set the view to be normal
+    //                excel.ActiveWindow.View = Microsoft.Office.Interop.Excel.XlWindowView.xlNormalView;
+    //                // get the range of cells in the worksheet
+    //                var range = worksheet.UsedRange;
+    //                // get the list of data filters
+    //                var filter = worksheet.AutoFilter;
+    //                // get the number of rows and columns in the worksheet
+    //                var rowCount = range.Rows.Count;
+    //                var columnCount = range.Columns.Count;
+    //                // sort the worksheet by this column
+    //                worksheet.Sort.SortFields.Clear();
+    //                worksheet.Sort.SortFields.Add(cell, Microsoft.Office.Interop.Excel.XlSortOn.xlSortOnValues, Microsoft.Office.Interop.Excel.XlSortOrder.xlAscending, Type.Missing, Type.Missing);
+    //                worksheet.Sort.SetRange(range);
+    //                worksheet.Sort.Header = Microsoft.Office.Interop.Excel.XlYesNoGuess.xlYes;
+    //                worksheet.Sort.MatchCase = false;
+    //                worksheet.Sort.Orientation = Microsoft.Office.Interop.Excel.XlSortOrientation.xlSortColumns;
+    //                worksheet.Sort.SortMethod = Microsoft.Office.Interop.Excel.XlSortMethod.xlPinYin;
+    //                worksheet.Sort.Apply();
+    //            }
+    //            else
+    //            {
+    //                done = true;
+    //            }
+    //        }
+    //        catch (System.Runtime.InteropServices.COMException ex)
+    //        {
+    //            WriteLine($"Error finding cell {ex.Message}, trying again");
+    //            Thread.Sleep(1000);
+    //        }
+    //    }
+    //    return found;
+    //}
+
     void LoadCSVDataFiles(int backHistoryDayCount, int maxEventAge, bool generateMasterRegexList, SortedDictionary<string, int> mapFileNameToColumnPosition, AutoMultiDimSortedDictionary<string, AutoInitSortedDictionary<string, SortedSet<DateTime>>> mapSymbolToFileNameToDates, SortedDictionary<string, DateTime> mapFileNameToMostRecentFileDate, SortedDictionary<DateTime, string> mapMostRecentDateToFile, ref int columnCurrent, AutoMultiDimSortedDictionary<string, AutoMultiDimSortedDictionary<DateTime, AutoInitSortedDictionary<string, string>>>? emptyDefaultValues, ref IEnumerable<History> history, ref SortedSet<DateTime> historyDates, SortedSet<string> fileNamesWithHistory, string arg)
     {
         //var fileNames = ExpandFilePaths(arg);
@@ -560,7 +699,12 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
                 if (generateMasterRegexList)
                     history = new List<History>();
                 else
-                    history = Directory.GetDirectories(ExpandEnvironmentVariables(@"%USERPROFILE%\Downloads")).Select(d => new { Name = Path.GetFileName(d), Path = d }).Where(d => patDateTime_YYYY_MMM_dd_ddd.Match(d.Name).Success).Select(d => { var m = patDateTime_YYYY_MMM_dd_ddd.Match(d.Name); var r = new { Name = d.Name, Path = d.Path, Date = System.DateTime.Parse(m.Groups[1].Value) }; return r; }).OrderByDescending(d => d.Date).Take(backHistoryDayCount).Select(f => new History { Date = f.Date, FileExists = System.IO.File.Exists(Path.Combine(f.Path + "\\" + fileName)), Name = System.IO.Path.Combine(f.Path + "\\" + fileName) });
+                {
+                    var downloadDirs = Directory.GetDirectories(ExpandEnvironmentVariables(@"%USERPROFILE%\Downloads")).ToList();
+                    var downloadDirs2 = Directory.GetDirectories(ExpandEnvironmentVariables(@"%DN002%"));
+                    downloadDirs.AddRange(downloadDirs2);
+                    history = downloadDirs.Select(d => new { Name = Path.GetFileName(d), Path = d }).Where(d => patDateTime_YYYY_MMM_dd_ddd.Match(d.Name).Success).Select(d => { var m = patDateTime_YYYY_MMM_dd_ddd.Match(d.Name); var r = new { Name = d.Name, Path = d.Path, Date = System.DateTime.Parse(m.Groups[1].Value) }; return r; }).OrderByDescending(d => d.Date).Take(backHistoryDayCount).Select(f => new History { Date = f.Date, FileExists = System.IO.File.Exists(Path.Combine(f.Path + "\\" + fileName)), Name = System.IO.Path.Combine(f.Path + "\\" + fileName) });
+                }
                 mapMostRecentDateToFile[listDateTime.Date] = fileName;
                 mapFileNameToMostRecentFileDate[fileName] = listDateTime.Date;
                 MakeHistoryDateSet(history, TODAY, ref historyDates);
@@ -758,7 +902,7 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
         return screenTip;
     }
     void GenerateXMLWorksheetDataRows(int BACK_HISTORY_COUNT, 
-        AutoMultiDimSortedDictionary<string, AutoMultiDimSortedDictionary<string, AutoMultiDimSortedDictionary<DateTime, AutoInitSortedDictionary<string, string>>>> mapFileNameToSymbolToDatesToAttributes, 
+        //AutoMultiDimSortedDictionary<string, AutoMultiDimSortedDictionary<string, AutoMultiDimSortedDictionary<DateTime, AutoInitSortedDictionary<string, string>>>> mapFileNameToSymbolToDatesToAttributes, 
         SortedDictionary<string, SymbolInList> comparisonGrid, SortedDictionary<string, int> mapFileNameToColumnPosition, SortedDictionary<string, string> mapFileNameToFileNameNoExt, AutoMultiDimSortedDictionary<string, AutoInitSortedDictionary<string, SortedSet<DateTime>>> mapSymbolToFileNameToDates, StringBuilder sbXMLWorksheetRows, StringBuilder sbCSV, bool debug, ref int rowCount, ref int columnCurrent, AutoInitSortedDictionary<string, ExcelStyle> excelStyles, SortedSet<string> fileNamesWithHistory, int columnCount, DateTime[] historyDirectoryDateArray, Dictionary<string, (bool tip, string displayName, Func<string, string> convert)> mapAttributeNameToScreenTip, (string orderBy, string colorCodedAttributeName) workSheet)
     {
         foreach (var equitySymbol in comparisonGrid.Keys.Where(s => !string.IsNullOrEmpty(s)))
@@ -803,14 +947,18 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
                         var name = matchNotes.Groups[2].Value;
                         var formulas = matchNotes.Success ? matchNotes.Groups[3].Value == "Formulas" : false;
                         var stock = mapFileNameToSymbolToDatesToAttributes[fileName][symbol][latest];
-                        var notes = stock[$"{name}Notes"]; // notes may contain a single comment, a single formula, or multiple notes
-                        notes = patDateTime_ddd_MMM_dd_YYYY_ddd_MMM_dd_YYYY.Replace(notes, m => m.Groups[6].Value); // remove the date of data entry and leave the date of the data (report)   
-                        notes = notes.Trim();
-                        var line = formulas ?
-                            $"""    <Cell{skipToIndex} ss:Formula="{notes}" ss:StyleID="s70"><NamedCell ss:Name="_FilterDatabase"/></Cell><!-- col={columnCurrent} fn={fileName}-->""" 
-                            : 
-                            $"""    <Cell{skipToIndex}><ss:Data ss:Type="String" xmlns="http://www.w3.org/TR/REC-html40">{notes}</ss:Data><NamedCell ss:Name="_FilterDatabase"/></Cell><!-- col={columnCurrent} fn={fileName}-->""" ;
-                        sbXMLWorksheetRows.AppendLine(line);
+                        if(stock.ContainsKey($"{name}Notes"))
+                        {
+                            var notes = stock[$"{name}Notes"]; // notes may contain a single comment, a single formula, or multiple notes
+                            //var daysOld = stock.ContainsKey($"{name}DaysOld") ? stock[$"{name}DaysOld"] : "99";
+                            notes = patDateTime_ddd_MMM_dd_YYYY_ddd_MMM_dd_YYYY.Replace(notes, m => m.Groups[6].Value); // remove the date of data entry and leave the date of the data (report)   
+                            notes = notes.Trim();
+                            var line = formulas ?
+                                $"""    <Cell{skipToIndex} ss:Formula="{notes}" ss:StyleID="s70"><NamedCell ss:Name="_FilterDatabase"/></Cell><!-- col={columnCurrent} fn={fileName}-->""" 
+                                : 
+                                $"""    <Cell{skipToIndex}><ss:Data ss:Type="String" xmlns="http://www.w3.org/TR/REC-html40">{notes}</ss:Data><NamedCell ss:Name="_FilterDatabase"/></Cell><!-- col={columnCurrent} fn={fileName}-->""" ;
+                            sbXMLWorksheetRows.AppendLine(line);
+                        }
                     }
                     else if (matchGroupSymbol.Success)
                     {
@@ -829,17 +977,19 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
                     else if (matchGroups.Success)
                     {
                         var stock = mapFileNameToSymbolToDatesToAttributes[fileName][symbol][latest];
-                        var group = stock["Group"];
-                        var line = $"""    <Cell{skipToIndex}><Data ss:Type="String">{group}</Data><NamedCell ss:Name="_FilterDatabase"/></Cell><!-- col={columnCurrent} fn={fileName}-->""";
+                        var name = matchGroups.Groups[3].Value;
+                        var groupOrManagedBy = stock[name];
+                        var line = $"""    <Cell{skipToIndex}><Data ss:Type="String">{groupOrManagedBy}</Data><NamedCell ss:Name="_FilterDatabase"/></Cell><!-- col={columnCurrent} fn={fileName}-->""";
                         sbXMLWorksheetRows.AppendLine(line);
                     }
                     else if (matchUnrealizedGains.Success)
                     {
-                        var name = matchUnrealizedGains.Groups[3].Value;
+                        var name = matchUnrealizedGains.Groups[3].Value; // use the 3rd capture group in the file name to know the column name to fetch
                         var stock = mapFileNameToSymbolToDatesToAttributes[fileName][symbol][latest];
                         var sharesOrProfitLossOrUnitCost = stock[name].Trim();
                         var style = "";
-                        if ("ProfitLoss" == name || "PortionOfTotalAccount" == name || name == "DailyChange" || name == "IRR")
+                        var dailyChange = patDailyChange.Match(name).Success;
+                        if ("ProfitLoss" == name || "PortionOfTotalAccount" == name || dailyChange || name == "IRR")
                         {
                             if (sharesOrProfitLossOrUnitCost.IndexOf("$") >= 0)
                             {
@@ -1424,7 +1574,9 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
         {31, new AttributeAttributes("30 Day ATR %"            , true , false, "30 Day ATR %"        ,e=>e, FormatPercentFloat, 100, 0) },
         {32, new AttributeAttributes("50 Day ATR %"            , true , false, "50 Day ATR %"        ,e=>e, FormatPercentFloat, 100, 0) },
         {33, new AttributeAttributes("Account"                 , false, false, "Account"             ,e=>e, null) },
-        {34, new AttributeAttributes("Group"                   , false, false, "Group"               ,e=>e, null) }
+        {34, new AttributeAttributes("Group"                   , false, false, "Group"               ,e=>e, null) },
+        {35, new AttributeAttributes("Cost"                    , true,  false, "Cost"                ,e=>e, FormatFloat) },
+        {36, new AttributeAttributes("Total Cost"              , true,  false, "Total Cost"          ,e=>e, FormatFloat) }
 
     };
     static string FormatDollarVolume(string e, string M ="")
@@ -1478,22 +1630,44 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
     static Dictionary<string, AttributeAttributes> mapAttributeNametoAttributeAttributes = MakeMapAttributeNametoAttributeAttributes(mapPositionToAttributeName);
     static Regex patRestoreCommas = new Regex(@"\&comma;");
     static Regex patRestoreNewLines = new Regex(@"\&(newline|nl);");
+    static Regex patTag = new Regex(@"<B>\s*<Font[^>]*>\s*![A-Z][A-Z0-9\.=]*!\s*</Font>\s*</B>");
     static (Regex regex, string replacement)[] patHighLightKeyWord = {
         (new Regex("NEUTRAL"), """<B><Font html:Size="14" html:Color="#FFC000">NEUTRAL</Font></B>"""),
         (new Regex("(?<!STRONG\\s*)SELL"),    """<B><Font html:Size="14" html:Color="#FF0000">SELL</Font></B>"""),
         (new Regex("Reiterate Buy",RegexOptions.IgnoreCase), """<B><Font html:Color="#008080">Reiterate Buy</Font></B>"""),
-        (new Regex("(?<!STRONG\\s*)BUY"),"""<B><Font html:Size="14" html:Color="#008080">BUY</Font></B>"""),
+        //(new Regex("(?<!STRONG\\s*)BUY"),"""<B><Font html:Size="14" html:Color="#008080">BUY</Font></B>"""),
         (new Regex("LOW"),"""<B><Font html:Size="14" html:Color="#008080">LOW</Font></B>"""),
         (new Regex("HIGH"),"""<B><Font html:Size="14" html:Color="#FF0000">HIGH</Font></B>"""),
+        (new Regex("(!AVOID!|!SHORT!)"),"""<B><Font html:Size="14" html:Color="#FF0000">$1</Font></B>"""), 
+        (new Regex("(!HOLD!|!SELL!|!BUY!|!WED!|!BSW!|!SL!|!WFV!|!GSW!)"),"""<B><Font html:Size="14" html:Color="#1873BD">$1</Font></B>"""), // !WED! == Watch Every Day! SL! == Short List BSW! == Best Stocks to Watch! WFV=Mike Webster's Favorite
+        (new Regex("(!BP([=0-9\\.]+)?!)"),"""<B><Font html:Size="14" html:Color="#3EB534">$1</Font></B>"""), // Green !BP! == at buy point      
+        (new Regex("(!W4PB!|!BOW!)"),"""<B><Font html:Size="14" html:Color="#00CCFF">$1</Font></B>"""), // W4PB=Wait for pull back BOW=Break out watch
         (new Regex("STRONG\\s*BUY"),"""<B><I><Font html:Size="15" html:Color="#008080">STRONG BUY</Font></I></B>"""),
         (new Regex("STRONG\\s*SELL"),"""<B><I><Font html:Size="15" html:Color="#FF0000">STRONG SELL</Font></I></B>"""),
         (new Regex("MODERATE"),"""<B><Font html:Size="14" html:Color="#00CCFF">MODERATE</Font></B>"""),
         (new Regex("MEDIUM"),"""<B><Font html:Size="14" html:Color="#00CCFF">MEDIUM</Font></B>"""),
         (new Regex("HOLD"),"""<B><Font html:Size="14" html:Color="#00CCFF">HOLD</Font></B>"""),     
-        (new Regex(@"(PO):?"),"""<B><Font html:Size="14" html:Color="#00CCFF">PT:</Font></B>"""),
+        (new Regex(@"\b(PO)\b:?"),"""<B><Font html:Size="14" html:Color="#00CCFF">PT:</Font></B>"""),
         (new Regex(@"(FMV|Fair Value Estimate|PRICE TARGET|TARGET PRICE)(:)?",RegexOptions.IgnoreCase),"""<B><Font html:Size="14" html:Color="#00CCFF">PT$2</Font></B>"""),
         (new Regex(@"(Target Price:?|Price Target( Raised to)?:?|PRICE TARGET:|(Raising )?Fair Value Estimate( to)?:?|) (\$[0-9\.]+)"),"""<B><Font html:Size="14" html:Color="#00CCFF">$0</Font></B>""")
     };
+    static Dictionary<string,string> flags = new Dictionary<string, string> {
+        {"!WED!", "Watch Every Day"},
+        {"!BSW!", "Best Stocks to Watch"},
+        {"!SL!", "Short List"},
+        {"!WFV!", "Mike Webster's Favorite"},
+        {"!BP!", "At Buy Point"},
+        {"!BOW!", "Break Out Watch"},
+        {"!AVOID!", "Avoid buying"},
+        {"!SHORT!", "Short"},
+        {"!BUY!", "buy" },
+        {"!SELL!", "sell" },
+        {"!HOLD!", "hold" },
+        {"!W4PB!", "Wait for Pull Back"},
+        {"!GSW!","IBD50 Growth Stocks to Watch" }
+    };
+    static Regex patNoteHeaderBody = new Regex(@"^(\d{2}\s+(Sun|Mon|Tue|Wed|Thu|Fri|Sat)\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d+,?\s+\d{2}\s*<B>[A-Z]+</B>:)(\s*(\s*![A-Z]+!\s*))*(.*)$");
+    static Regex patTags = new Regex(@"(\s*(![A-Z]+!))+");
     AutoMultiDimSortedDictionary<string/*symbol*/, AutoMultiDimSortedDictionary<DateTime, AutoInitSortedDictionary<string/*metric name*/, string/*metric value*/>>> ParseCSV(
         string fileName,
         DateTime listDateTime,
@@ -1541,8 +1715,9 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
                     result = new AutoInitSortedDictionary<string, string>(); // In notes files we can have multiple lines for the same symbol so we use the same results
                     if(isSchwabGroupFileName.Success)
                     {
-                        var groupName = csv.GetField<string>("Group");
-                        result.Add("Group", groupName);
+                        var groupOrManagedBy = isSchwabGroupFileName.Groups[3].Value;
+                        var groupName = csv.GetField<string>(groupOrManagedBy);
+                        result.Add(groupOrManagedBy, groupName);
                     }
                     else if (isAccountFileName.Success)
                     {
@@ -1593,19 +1768,40 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
                                 {
                                     note = pat.Replace(note, replace);
                                 }
-                            }                        
-                        notes = ((isCommentsFileName|isFormulasFileName)? "" : dateString + ": ") + note;// leave that date out of comments so they will take up less room
+                            }
+                        if (noteDaysOld > 99) noteDaysOld = 99;
+                        if (!string.IsNullOrWhiteSpace(note))
+                        {
+                            HashSet<string> tags;
+                            (tags,note) = ExtractTags(note);
+                            notes = ((isCommentsFileName | isFormulasFileName) ? "" : $"{noteDaysOld.ToString("00")} {dateString} <B>{symbol}</B>: {string.Join(" " , tags)}") + note;// leave that date out of comments so they will take up less room
+                        }
                         // Separate multiple notes with a new line
                         //var newline = result.ContainsKey($"{name}Notes") ? "&#10;" : "";
                         if (result.ContainsKey($"{name}Notes"))
                         {
-                            if (noteDaysOld < maxNotesDaysOld) // @@todo@@ Does this ever execute? I think NOT! I think this is now superfluous since we get a new result every time thru
+                            if (noteDaysOld < maxNotesDaysOld) // @@todo@@ Does this ever execute? I think NOT! Remove this! I think this is now superfluous since we get a new result every time thru
                             {
                                 var oldSize = result[$"{name}Notes"].Length;
                                 var newAdditional = note.Length;
-                                if (oldSize < maxNoteSize)
+                                if (oldSize+newAdditional < maxNoteSize)
                                 {
-                                    result[$"{name}Notes"] = result[$"{name}Notes"] + "&#10;" + notes;
+                                    // before joining the new note with the old notes, we need to extract the tags from the new note and the old notes (notes) and put them at the head (of the new note)
+                                    var newNote = result[$"{name}Notes"];
+                                    HashSet<string> newTags;
+                                    (newTags, newNote) = ExtractTags(newNote);
+                                    HashSet<string> oldTags;
+                                    (oldTags, notes) = ExtractTags(notes);
+
+                                    var m = patNoteHeaderBody.Match(newNote);
+                                    if (m.Success)
+                                    {
+                                        // replace group 4 with union of old and new tags
+                                        var newTagsString = string.Join(" ", oldTags.Union(newTags));
+                                        newNote = m.Groups[1].Value + " " + newTagsString;
+                                    }
+
+                                    result[$"{name}Notes"] = newNote + "&#10;" + notes;
                                     var newSize = result[$"{name}Notes"].Length;
                                     if (debug1) WriteLine($"""Adding note:      {name}Notes[{symbol}][{dateString}]=="{note.Substring(0, Math.Min(note.Length, 20))}" days old ({noteDaysOld}) oldSize={oldSize} adding={newAdditional} newSize={newSize}""");
                                 }
@@ -1755,7 +1951,23 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
                         {
                             foreach ((var key, var val) in result)
                             {
-                                rows[sym][listDateTime][key] = rows[sym][listDateTime][key] + "&#10;" + val;
+                                var oldNotes = val;
+                                // concatenate the new value with the old value: @@todo@@: implement constraints on size and date of hold notes here!
+                                var newNote = rows[sym][listDateTime][key];
+                                HashSet<string> newTags;
+                                (newTags, newNote) = ExtractTags(newNote);
+                                HashSet<string> oldTags;
+                                (oldTags, oldNotes) = ExtractTags(oldNotes);
+
+                                //patNoteHeader = new Regex(@"^(\d{2}\s+(Sun|Mon|Tue|Wed|Thu|Fri|Sat)\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d+,?\s+\d{2}\s*<B>[A-Z]+</B>:)(\s*(\s*![A-Z]+!\s*))*(.*)$");
+                                var m = patNoteHeaderBody.Match(newNote);
+                                if (m.Success)
+                                {
+                                    // replace group 4 with union of old and new tags
+                                    var newTagsString = string.Join(" ", oldTags.Union(newTags));
+                                    newNote = m.Groups[1].Value + " " + newTagsString + " " + m.Groups[5].Value.Trim() + " " + m.Groups[6].Value.Trim();
+                                }
+                                rows[sym][listDateTime][key] = newNote + "&#10;" + oldNotes;
                             }
                         }
                         else
@@ -1803,6 +2015,22 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
                 }
             }
         }
+    }
+
+    private static (HashSet<string>, string) ExtractTags(string note)
+    {
+        var tags = new HashSet<string>();
+        // remove all the tags from notes and add them to the tags
+        var m = patTag.Match(note);
+        while (m.Success)
+        {
+         var tag = m.Groups[0].Value;
+            note = note.Replace(tag, "");            
+            tags.Add(tag);
+            m = m.NextMatch();
+        }
+
+        return (tags,note);
     }
 
     void SaveMinMaxDoubleValues(string key, string val, string symbol)
