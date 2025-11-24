@@ -7,7 +7,26 @@ using System.Text.RegularExpressions;
 using static System.Console;
 using static System.Environment;
 using static System.Math;
-
+/**
+ * emacs F10
+ * Begin commands to execute this file using MS.NET with bash
+ * if test CompareTickerSymbolListsInCSVFilesMainProgram.cs -nt "${WINOOP}/C#/CompareTickerSymbolListsInCSVFiles/bin/Debug/net9.0/CompareTickerSymbolListsInCSVFiles.exe"
+ * then
+ * if [ -e CompareTickerSymbolListsInCSVFilesMainProgram.exe ]
+ * then
+ * echo rm CompareTickerSymbolListsInCSVFilesMainProgram.exe
+ * rm "${WINOOP}/C#/CompareTickerSymbolListsInCSVFiles/bin/Debug/net9.0/CompareTickerSymbolListsInCSVFiles.exe"
+ * fi
+ * echo devenv CompareTickerSymbolListsInCSVFiles.csproj /Build
+ * devenv CompareTickerSymbolListsInCSVFiles.csproj /Build
+ * else
+ * echo already compiled
+ * fi
+ * End commands to execute this file using MS.NET with bash
+ */
+//
+// Earngins & Sales data included. Allow override of hard coded filenames "MinDollarVol10MComp50ETF.csv" and "MinDollarVol10MComp50.csv". This works!
+// ${STACKS}/Users/shein/Documents/WinOOP/C#/CompareTickerSymbolListsInCSVFiles/CompareTickerSymbolListsInCSVFilesMainProgram00090.cs
 
 // Sample contents of formula file called "ttt SellSignalMCP Formulas.csv""
 //
@@ -31,7 +50,15 @@ using static System.Math;
 // TSM,  2025/03/16, =(RC[-8]-RC[-4])/(RC[-8]/(1+RC[22]/100)-RC[-4])
 
 
-record AttributeAttributes(string name, bool numeric, bool screenTip, string displayName, Func<string, string> convert, Func<string, string, string>? orderByConvert, double max = double.MinValue, double min=double.MaxValue);
+record AttributeAttributes(string name, 
+    bool numeric, 
+    bool screenTip, 
+    string displayName, 
+    Func<string, string> convert, 
+    Func<string, string, string>? orderByConvert, 
+    double max = double.MinValue, 
+    double min=double.MaxValue,
+    Action<CompareTickerSymbolListsInCSVFilesMainProgram, AutoInitSortedDictionary<string, string>,string>?attributeColumns=null);
 class DescendingComparer<T> : IComparer<T> where T : IComparable<T>
 {
     public static bool reverse { get; set; } = false;
@@ -47,7 +74,7 @@ class History
     public bool FileExists { get; set; }
     public string Name { get; set; }
 }
-record DataFileCatagories(SortedSet<string> preferred, SortedSet<string> missingDataColums, SortedSet<string> donotknow);
+//record DataFileCatagories(SortedSet<string> preferred, SortedSet<string> missingDataColums, SortedSet<string> donotknow);
 internal class CompareTickerSymbolListsInCSVFilesMainProgram
 {
     public CompareTickerSymbolListsInCSVFilesMainProgram()
@@ -80,8 +107,8 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
          //"Merrill-Holdings-Unrealized-Gain-Loss-Summary.csv",
          //"Merrill-Holdings.csv",
          "Mid Cap.csv",
-         "MinDollarVol10MComp50.csv",
-         "MinDollarVol10MComp50ETF.csv",
+         //"MinDollarVol10MComp50.csv",
+         //"MinDollarVol10MComp50ETF.csv",
          "Power from Pivot.csv",
          "RS Line 5% New High.csv",
          "RS Line Blue Dot.csv",
@@ -93,37 +120,49 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
          //"Top Sectors ETFs.csv",
          "Near Pivot.csv",
          "Watch.csv",
+         //"watch closely.csv",
+         "William J. O'Neil.csv",
+         "Up on Volume $20M.csv",
+         "Top Rated IPOs.csv",
     };
     static SortedSet<string> confidential = new SortedSet<string>(){
         "ttt ML Holdings ProfitLossDollar.csv",
         "ttt ML Holdings Shares.csv",
         "ttt ML Holdings NetLiquidValue.csv",
-        "sss Schwab Shares.csv",
-        "sss Schwab NetLiquidValue.csv",
-        "sss Schwab ProfitLossDollar.csv"
+//        "sss Schwab Shares.csv",
+//        "sss Schwab NetLiquidValue.csv",
+//        "sss Schwab ProfitLossDollar.csv"
         };
     static string? envVarSkipConfidential = GetEnvironmentVariable("SKIPCONF");
     static bool skipConfidential = envVarSkipConfidential != null && envVarSkipConfidential.ToLower() == "true" ? true : false;
 
-    static string orderPrefix = "aaa|bbb|ccc|ddd|eee|fff|ggg|hhh|iii|jjj|kkk|lll|mmm|nnn|ooo|ppp|qqq|rrr|sss|ttt|uuu|vvv|www|xxx|yyy|zzz";
-    static Regex patFileNameOrderPrefix = new Regex(@$"^(({orderPrefix})\s*)?(.*)$"); // optional file name prefix for implementing the order of the columns
+    /// <summary>
+    ///  In some cases file names may already contain a sort order prefix. In other cases, the copy of the file name used as an index in a
+    ///  dictionary will be enhanced with a sort order prefix. The sort order prefix will be removed (along with the file extension)
+    ///  when converting the file name into a excel column header.
+    /// </summary>
+    static string patSortOrderPrefix = "aaa[0-9]{0,3}|bbb[0-9]{0,3}|ccc[0-9]{0,3}|ddd[0-9]{0,3}|eee[0-9]{0,3}|fff[0-9]{0,3}|ggg[0-9]{0,3}|hhh[0-9]{0,3}|iii[0-9]{0,3}|jjj[0-9]{0,3}|kkk[0-9]{0,3}|lll[0-9]{0,3}|mmm[0-9]{0,3}|nnn[0-9]{0,3}|ooo[0-9]{0,3}|ppp[0-9]{0,3}|qqq[0-9]{0,3}|rrr[0-9]{0,3}|sss[0-9]{0,3}|ttt[0-9]{0,3}|uuu[0-9]{0,3}|vvv[0-9]{0,3}|www[0-9]{0,3}|xxx[0-9]{0,3}|yyy[0-9]{0,3}|zzz[0-9]{0,3}";
+    static Regex patFileNameOrderPrefix = new Regex(@$"^(({patSortOrderPrefix})\s*)?(.*)$"); // optional file name prefix for implementing the order of the columns
     static Regex patFileExtension = new Regex("^([^\\.]+)\\.([^\\.]+)$");
     static Regex patGotoRow = new Regex("^--GotoRow=([0-9]+)$");
-    //static Regex patSymbol = new Regex(@$"({orderPrefix})([a-zA-Z0-9]*)\s*Symbol(\.csv)?$");
+    //static Regex patSymbol = new Regex(@$"({patSortOrderPrefix})([a-zA-Z0-9]*)\s*Symbol(\.csv)?$");
     //[GeneratedRegex(@"zzz([a-zA-Z0-9]*)Notes(\.csv)?$")]
-    static Regex patNotes = new Regex(@$"({orderPrefix})\s*([a-zA-Z0-9]+)\s*(Notes|Comments|Formulas)(\.csv)?$");
-    static Regex patGroup = new Regex(@$"({orderPrefix})\s*([a-zA-Z0-9]*)\s*(Group|Managed(By)?)(\.csv)?$");
-    static Regex patSymbolName = new Regex(@$"({orderPrefix})\s*([a-zA-Z0-9]*)\s*SymbolName(\.csv)?$");
-    static Regex patDecoratedSymbol = new Regex(@$"({orderPrefix})\s*([a-zA-Z0-9]*)\s*DecoratedSymbol(\.csv)?$");
-    static Regex patAccount = new Regex(@$"({orderPrefix})\s*([a-zA-Z0-9]*)\s*Account(\.csv)?$");
-    static Regex patShares = new Regex(@$"({orderPrefix}) ?([- a-zA-Z0-9]*)\s*[sS]hares(\.csv)?$");
-    static Regex patUnrealizedGains = new Regex(@$"({orderPrefix}) ?([- a-zA-Z0-9]*)\s*(Daily ?Change|IRR|Price|Shares|UnitCost|TotalCost|ProfitLoss(Dollar)?|NetLiquidValue|PortionOf(Total)?Account)(\.csv)?$");
+    static Regex patNotes = new Regex(@$"({patSortOrderPrefix})\s*([a-zA-Z0-9]+)\s*(Notes|Comments|Formulas)(\.csv)?$");
+    static Regex patGroup = new Regex(@$"({patSortOrderPrefix})\s*([a-zA-Z0-9]*)\s*(Group|Managed(By)?)(\.csv)?$");
+    static Regex patSymbolName = new Regex(@$"({patSortOrderPrefix})\s*([a-zA-Z0-9]*)\s*SymbolName(\.csv)?$");
+    static Regex patDecoratedSymbol = new Regex(@$"({patSortOrderPrefix})\s*([a-zA-Z0-9]*)\s*DecoratedSymbol(\.csv)?$");
+    static Regex patAccount = new Regex(@$"({patSortOrderPrefix})\s*([a-zA-Z0-9]*)\s*(Account|AccntType)(\.csv)?$");
+    static Regex patAtr21Day = new Regex(@$"({patSortOrderPrefix})\s*([a-zA-Z0-9]*)\s*(ATR21Day)(\.csv)?$");
+    static Regex patNetLiqPercent = new Regex(@$"({patSortOrderPrefix})\s*([a-zA-Z0-9]*)\s*(NetLiqPercent|DATR21((Accnt|ManagedBy)(Group)?)?Percent)(-full)?(\.csv)?$");
+    static Regex patShares = new Regex(@$"({patSortOrderPrefix}) ?([- a-zA-Z0-9]*)\s*[sS]hares(\.csv)?$");
+    static Regex patUnrealizedGains = new Regex(@$"({patSortOrderPrefix}) ?([- a-zA-Z0-9]*)\s*(Daily ?Change|IRR|Price|DATR21|Shares|UnitCost|TotalCost|ProfitLoss(Dollar)?|NetLiquidValue|PortionOf(Total)?Account)(-full)?(\.csv)?$");
     static Regex patDailyChange = new Regex(@"Daily ?Change");
     static Regex patHistory = new Regex(@"--[Hh]istoryDays=([0-9]+)");
     static Regex patAddSpaceNotesSwitch = new Regex(@"^(.*)(Notes)$");
     static Regex patNoteColumnWidthSwitch = new Regex(@"--Note(Col(umn)?Width)?=([0-9]+)");
     static Regex patMaxEventAge = new Regex(@"--MaxEvent(Days?)?Age?=([0-9]+)");
     static Regex patOrderBySwitch = new Regex(@"--OrderBy=([a-zA-Z0-9_%\(\)]+)");
+    static Regex patGenerateMasterSymbolList = new Regex(@"--([gG]enerate)?[mM]aster(Symbol)?List");
     static Regex patColorBySwitch = new Regex(@"--ColorBy=([a-zA-Z0-9_%/\(\)]+)");
     static Regex patMaxHistory = new Regex(@"--MaxHistory=([0-9]+)");
     static Regex patMaxNotesDaysOld = new Regex(@"--MaxNotesDaysOld=([0-9]+(\.[0-9]+))");
@@ -132,11 +171,22 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
     static Regex patRemoveFinalM = new Regex(@"^(.*)M$");
     static Regex patRemoveLeadingZeros = new Regex(@"^(0+)(.*)$");
     static Regex patCheckStockFileLists = new Regex(@"--[Cc]heck(Stock(File(Lists)?)?)?");
+    static readonly Regex patMasterStockList = new Regex("--[Mm]asterStockList(File)?$"); // beware! these are are weird: they don't have an "="
+    static readonly Regex patMasterETFList = new Regex("--[Mm]asterETFList(File)?$"); // beware! these are are weird: they don't have an "="
+    static readonly Regex patFileNameHasVersion = new Regex(@"^(.*)( \([0-9]+\))(\.csv)$");
+    static Regex patOutputFileName = new Regex(@"--[Oo]ut(put(File(Name)?)?)?=([-A-Za-z0-9:\\%_\.]+)$");
+    static Regex patBrokerageAccountEquitySymbol = new Regex(@"^([^:]+):([^:]+):([^:]+)$");
     static string NoteColumnWidth = "400";
     static string SymbolColumnWidth = "37";//"32.75";
     static List<Regex> patSkipFiles = new List<Regex> {
+        //new Regex(@"sss Schwab NetLiqPercent(-(full|partial))?\.csv"),
+        new Regex(@"\([0-9]+\)\.csv$"),
+        new Regex(@"^ETF Indicies\.csv$"),
+        new Regex(@"Consolidated."),
+        //new Regex(@"^sss Schwab (NetLiqPercent|DATR21AccntPercent|DATR21)(-(full|partial))\.csv$"),
+        new Regex(@"^sss Schwab Shares(-(full|partial))\.csv$"),
         new Regex(@"ttt (SellSignalMCP Formulas|SellSignal200DayMA Comments)\.csv"),
-        new Regex(@"^MinDollarVol10MComp50(ETF)?\.csv$"),
+        new Regex(@"^MinDollarVol10MComp50(ETF)?( \([0-9]+\))?\.csv$"),
         new Regex(@"^197 Industry Groups\.csv$"),
         new Regex(@"^All_Accounts_GainLoss_Realized(_Details)?_[0-9]+-[0-9]+.csv"),// Schwab TOS download
         new Regex(@"^Individual_[^_]+_Transactions_[0-9]+-[0-9]+.csv"),// Schwab web site download
@@ -148,15 +198,20 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
         new Regex(@"^All_Accounts_GainLoss_Realized_Details_([0-9]+-[0-9]+)\.csv$"),
         new Regex(@"^Realized Gain Loss.*\.csv$"),
         new Regex(@"^UC_[0-9]+_[0-9]+\.csv$"), // Schwab TOS download
-        new Regex(@"^[0-9]+-[0-9]+-[0-9]+-([0-9]+-)?(PositionStatement|watchlist)\.csv$"), // Schwab TOS download
+        new Regex(@"^[0-9]+-[0-9]+-[0-9]+-([0-9]+-)?(PositionStatement|watchlist)(-full)?\.csv$"), // Schwab TOS download
+        new Regex(@"^Top (25 Funds Over [0-9]+ Years|Mutual Funds|[0-9]+ Industry or Sector Funds Over [0-9]+ Years)( \([0-9]+\))?\.csv"), // not used for comparison
+        new Regex(@"^Top 25 Funds Over 10 years( \([0-9]+\))?\.csv"), // not used for comparison
+        new Regex(@"^Top 25 Sector Funds Over 3 Years( \([0-9]+\))?\.csv$"), // not used for comparison
+        new Regex(@"^Top Rated (Value|Growth) Funds( \([0-9]+\))?\.csv$"), // not used for comparison
         new Regex(@"^SEP-IRA-Positions-\d+-\d+-\d+-\d+\.csv$"),
         new Regex(@"^(197 Industry Groups|MarketSmith Growth 250)\.csv$"),
         //new Regex(@"^MarketSurge Growth 250\.csv$"),
         new Regex(@"2024 Aug Holdings Activity.csv$"),
-        new Regex(@"[0-9]+-[0-9]+-[0-9]+-TradeActivity\.csv$"), // schwab TOS download
+        new Regex(@"[0-9]+-[0-9]+-[0-9]+-TradeActivity(-full)?\.csv$"), // schwab TOS download
         new Regex(@"^paper trading realized gain loss TOS \d+-\d+-\d+-AccountStatement\.csv$"),
         new Regex(@"Lot-Details\.csv$"),
-        new Regex(@"^(Merril.*|SEP-IRA.*|paper trading.*|.*Ameritrade.*|197 Industry Groups|MinDollarVol[0-9]+MComp[0-9]+)\.csv$")};
+        new Regex(@"^(Merril.*|SEP-IRA.*|paper trading.*|.*Ameritrade.*|197 Industry Groups|MinDollarVol[0-9]+MComp[0-9]+)\.csv$"),
+    };
     static List<Regex> patSkipFilesMasterList = new List<Regex> { new Regex(@"^zzz.*\.csv$"), new Regex(@"^sss Schwab [A-Za-z0-9 ]+\.csv$") };
     static DateTime TODAY = System.DateTime.Today.AddHours(12);
     static bool SkipFile(string filePath)
@@ -179,18 +234,37 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
         }
         else
         {
+            // fix this: should return null
+            //switchValue = null; 
             switchValue = string.Empty;
             return false;
         }
     }
+    static bool generateMasterRegexList = false;
     static double maxNotesDaysOld = 40;
     static int maxNoteSize = 1000;
-    AutoMultiDimSortedDictionary<string/*symbol*/, AutoMultiDimSortedDictionary<DateTime, AutoInitSortedDictionary<string/*metric name*/, string/*metric value*/>>> defaultTodayValues = null;
-    AutoMultiDimSortedDictionary<string/*file name*/, AutoMultiDimSortedDictionary<string /*symbol*/, AutoMultiDimSortedDictionary<DateTime, AutoInitSortedDictionary<string/*metric name*/, string/*metric value*/>>>> mapFileNameToSymbolToDatesToAttributes = new();// new DescendingComparer<string>());
+    AutoMultiDimSortedDictionary<string/*symbol*/, AutoMultiDimSortedDictionary<DateTime, AutoInitSortedDictionary<string/*ageMetric name*/, string/*ageMetric value*/>>> defaultTodayValues=new();
+    AutoMultiDimSortedDictionary<string/*symbol*/, AutoMultiDimSortedDictionary<DateTime, AutoInitSortedDictionary<string/*ageMetric name*/, string/*ageMetric value*/>>> defaultTodayETFValues=new();
+    AutoMultiDimSortedDictionary<string/*file name*/, AutoMultiDimSortedDictionary<string /*symbol*/, AutoMultiDimSortedDictionary<DateTime, AutoInitSortedDictionary<string/*ageMetric name*/, string/*ageMetric value*/>>>> mapFileNameToSymbolToDatesToAttributes = new();// new DescendingComparer<string>());
     ExcelStyleSaturationRange stockExcelSaturationAgeStyle;
     static AutoInitDoubleSortedDictionary<string> doubleMin = new();
     static AutoInitDoubleSortedDictionary<string> doubleMax = new();
-    public bool CheckStockFileLists {get; set; } = false;
+    bool CheckStockFileLists {get; set; } = false;
+    bool LoadExcelSpreadsheet = true;
+    string? outputFileName = null;
+    SortedDictionary<string, SymbolInList> masterSymbolListForWorksheet;
+
+    // @@todo@@: remove thismapSortOrderPrefixedFileNameToColumnPosition. It is redundant
+    SortedDictionary<string, int> mapSortOrderPrefixedFileNameToColumnPosition = new(new DescendingComparer<string>()); // key is file name only, value is column position in the worksheet. File name may be augmented with sort order prefix
+    SortedDictionary<string, string> mapSortOrderPrefixedFileNameToFileName = new();
+    SortedDictionary<string, string> mapFileNameToSortOrderPrefixedFileName = new();
+
+    // @@todo@@ this is superfluous! Remove this and mapSortOrderPrefixedFileNameToColumnPosition
+    string[] sortOrderPrefixedFileNames;
+
+    bool fullPositionStatement = false; // true if the position statement contains all accounts
+    static readonly Regex patFullOutputFileName = new Regex(@"-full\.xml$"); // if the output file name ends with -full.xml then the full position statement is being used.
+
     public static void Main(string[] args)
     {
         var main = new CompareTickerSymbolListsInCSVFilesMainProgram();
@@ -199,9 +273,7 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
         string initialRow = args.Length > 0 && Int32.TryParse(args[0], out Int32 _) ? args[0] : "6";
         var generateCSV = false;
         var generateXML = true;
-        var generateMasterRegexList = false;
-        SortedDictionary<string, int> mapFileNameToColumnPosition = new(new DescendingComparer<string>());
-        SortedDictionary<string, string> mapFileNameToFileNameNoExt = new();
+        SortedDictionary<string, string> mapFileNameToColumnHeader = new();
         AutoMultiDimSortedDictionary<string/*symbol*/, AutoInitSortedDictionary<string/*file name only*/, SortedSet<DateTime>>> mapSymbolToFileNameToDates = new();
         SortedDictionary<string, DateTime> mapFileNameToMostRecentFileDate = new();
         SortedDictionary<DateTime, string> mapMostRecentDateToFile = new(new DescendingComparer<DateTime>());
@@ -215,21 +287,16 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
         args = GetFileNamesAndSwitchesFromArgs(args);
         var verticalSplitter = false;
         var excelStyles = new AutoInitSortedDictionary<string/* Hexadecimal color name */, ExcelStyle>();
-        var workSheets = new List<(string orderBy ,string colorCodedAttributeName)>();
+        var workSheets = new List<(string orderBy, string colorCodedAttributeName)>();
         // emacs solve([0 * m + b = 120, 1 * m + b = 235], [m, b])==[m = 115, b = 120]
         //var stockExcelHueAgeStyle = new ExcelStyleHueRange { Saturation = 240f, Luminance = 240f, HueMin = 120.0 / 360.0 * 255.0, HueMax = 235 / 360.0 * 255.0, InputMetricMin = 0, InputMetricMax = 1, HueScale = 115.0, HueOffset = 120 };
         main.stockExcelSaturationAgeStyle = new ExcelStyleSaturationRange { Hue = 120.0 / 360.0 * 255.0, Luminance = 240f, SaturationMin = 120.0 / 360.0 * 255.0, SaturationMax = 355.0 / 360.0 * 255.0, InputMetricMin = 0, InputMetricMax = 1, SaturationScale = 115.0, SaturationOffset = 120 };
         var mapAttributeNameToScreenTip = new Dictionary<string, (bool tip, string displayName, Func<string, string> convert)>();
-        AutoMultiDimSortedDictionary<string/*symbol*/, AutoMultiDimSortedDictionary<DateTime, AutoInitSortedDictionary<string/*metric name*/, string/*metric value*/>>>? emptyDefaultValues = null;
-        var defaultValuesFileName = ExpandEnvironmentVariables(@"%DN%\MinDollarVol10MComp50.csv");
-        main.defaultTodayValues = main.ParseCSV(defaultValuesFileName, ExtractDateTimeFromFilePath(defaultValuesFileName).Date, emptyDefaultValues, maxEventAge);
-        defaultValuesFileName = ExpandEnvironmentVariables(@"%DN%\MinDollarVol10MComp50ETF.csv");
-        var defaultTodayETFValues = main.ParseCSV(defaultValuesFileName, ExtractDateTimeFromFilePath(defaultValuesFileName).Date, emptyDefaultValues, maxEventAge);
-        foreach(var (symbol, mapDatesToMetrics) in defaultTodayETFValues)
-            foreach (var (date, mapMetrics) in mapDatesToMetrics)
-                foreach (var (metric, value) in mapMetrics)
-                    main.defaultTodayValues[symbol][date][metric] = value;
-
+        AutoMultiDimSortedDictionary<string/*symbol*/, AutoMultiDimSortedDictionary<DateTime, AutoInitSortedDictionary<string/*ageMetric name*/, string/*ageMetric value*/>>>? emptyDefaultValues = null;
+        
+        var masterStockListFilePath = ExpandEnvironmentVariables(@"%DN%\MinDollarVol10MComp50.csv");
+        var masterETFListFilePath = ExpandEnvironmentVariables(@"%DN%\MinDollarVol10MComp50ETF.csv");
+        var csvDataFilesLoadList = new List<string>();
 
         // Throw away these minimum and maximum values because they are not from the lists were are interested in.
         doubleMin = new(); doubleMax = new();
@@ -243,11 +310,14 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
         // this is never used
         //foreach((var position, (var name, var numeric)) in mapPositionToAttributeName)  mapAttributeNameToPosition.Add(name, position);
         SortedSet<string> requiredFiles = new();
-        foreach(var pf in preferredFiles)
-            if(!SkipFile(pf))
+        foreach (var pf in preferredFiles)
+            if (!SkipFile(pf))
                 requiredFiles.Add(pf);
+            else if  (!generateMasterRegexList)
+                WriteLine($"skipping file {pf}");
         var idxArgs = 0;
-        while (idxArgs<args.Length)
+        bool addSkipFiles = true;
+        while (idxArgs < args.Length)
         {
             var arg = args[idxArgs];
             var matchHistory = patHistory.Match(arg);
@@ -255,7 +325,7 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
             {
                 debug = true;
             }
-            else if(arg == "--skipConfidential")
+            else if (arg == "--skipConfidential")
             {
                 skipConfidential = true;
             }
@@ -280,8 +350,9 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
                 verticalSplitter = true;
             else if (MatchSwitchWithValue(patOrderBySwitch, arg, out string orderByTemp, 1))
             {
+
                 var colorCodedAttributeName = "";
-                if(idxArgs+1<args.Length && MatchSwitchWithValue(patColorBySwitch, args[idxArgs+1], out string colorByTemp, 1))
+                if (idxArgs + 1 < args.Length && MatchSwitchWithValue(patColorBySwitch, args[idxArgs + 1], out string colorByTemp, 1))
                 {
                     colorCodedAttributeName = colorByTemp;
                     idxArgs++;
@@ -295,9 +366,10 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
                 // skip, already handled
             }
 
-            else if (arg  == "--masterList")
+            else if (patGenerateMasterSymbolList.Match(arg).Success /*fileName == "--masterList"*/)
             {
                 generateMasterRegexList = true;
+                patSkipFiles.Add(new Regex(@"sss Schwab NetLiqPercent(-(full|partial))?\.csv")); // this has equity symbols that include Siegfried's special prefixes for account and group (separated with colons) and this will mess up the generation of a master symbol list
                 patSkipFiles.AddRange(patSkipFilesMasterList);
                 generateXML = false;
                 generateCSV = false;
@@ -322,36 +394,158 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
             {
                 backHistoryDayCount = Int32.Parse(tmpBackHistoryDayCount);
             }
-            else { 
+            // else if (MatchSwitchWithValue(patOutputFileName, fileName, out string fileName, 4))
+            // {
+            //     if (!string.IsNullOrEmpty(fileName))
+            //         main.outputFileName = fileName;
+            // }
+            // I could not make this work when there were spaces in the file name.
+            //else if (MatchSwitchWithValue(patMasterStockList, fileName, out string masterStockListFileName, 2))
+            //{
+            //    if (!string.IsNullOrEmpty(masterStockListFileName))
+            //    {
+            //        masterStockListFilePath = ExpandEnvironmentVariables(masterStockListFileName);
+            //        if (!generateMasterRegexList)
+            //            WriteLine($"masterStockListFilePath = {masterStockListFilePath}");
+            //    }
+            //}
+            //else if (MatchSwitchWithValue(patMasterETFList, fileName, out string masterETFListFileName, 2))
+            //{
+            //    if (!string.IsNullOrEmpty(masterETFListFileName))
+            //    {
+            //        masterETFListFilePath = ExpandEnvironmentVariables(masterETFListFileName);
+            //        if(!generateMasterRegexList)
+            //            WriteLine($"masterETFListFilePath = {masterETFListFilePath}");
+            //    }
+            //}
+            else if (arg == "--outputFileName")
+            {
+                var fn = args[++idxArgs];
+                if (!string.IsNullOrEmpty(fn))
+                {
+                    main.outputFileName = ExpandEnvironmentVariables(fn);
+                    main.fullPositionStatement = patFullOutputFileName.Match(Path.GetFileName(main.outputFileName)).Success;
+                    if (!generateMasterRegexList)
+                        WriteLine($"main.outputFileName = {main.outputFileName}");
+                }
+            }
+            else if (patMasterStockList.Match(arg).Success /*arg == "--masterStockList"*/) // watch out! There is no "=" and this is inconsistent with the other switches.
+            {
+                var fn = args[++idxArgs];
+                if (!string.IsNullOrEmpty(fn))
+                {
+                    masterStockListFilePath = ExpandEnvironmentVariables(fn);
+                    ConditionallyAddUnversionedFileNameToSkipList(fn);
+                    if (!generateMasterRegexList)
+                        WriteLine($"masterStockListFilePath = {masterStockListFilePath}");
+                }
+            }
+            else if (patMasterETFList.Match(arg).Success/*arg == "--masterETFList"*/) // watch out! There is no "=" and this is inconsistent with the other switches.
+            {
+                var fn = args[++idxArgs];
+                if (!string.IsNullOrEmpty(fn))
+                {
+                    masterETFListFilePath = ExpandEnvironmentVariables(fn);
+                    var m = patFileNameHasVersion.Match(Path.GetFileName(fn));
+                    ConditionallyAddUnversionedFileNameToSkipList(fn);
+                    if (!generateMasterRegexList)
+                        WriteLine($"masterETFListFilePath = {masterETFListFilePath}");
+                }
+            }
+            else if (MatchSwitchWithValue(patTickerSymbolColumnWidth, arg, out string tickerSymbolColumnWidth, 4))
+            {
+                SymbolColumnWidth = tickerSymbolColumnWidth;
+            }
+            else // it is not a command line switch. It must be a file name
+            {
+                if (addSkipFiles)
+                {
+                    // assumption: we have processed the --outputFileName switch if it was present and determined if the full position statement is being used or not.
+                    // Assumption: the full position statement file name contains all accounts and the partial position statement file name does not contain all of them.
+                    // @@todo@@: --outputFileName is now required if we are going to deal with partial v full position statements.
+                    // what to do? error out if --outputFileName is not present?
+                    var patstr = @"^(sss Schwab )?(Net\s*Liq|DATR21)\s*(Net\s*Liq|(Accnt|ManagedBy)(\s*Group)?)?(\s*Percent)?" + (main.fullPositionStatement ? "":"-full" ) + @"\.csv$";
+                    var pat = new Regex(patstr);
+                    var xyz = pat.Match("sss Schwab DATR21-full.csv").Success;
+                    patSkipFiles.Add(pat);
+                    addSkipFiles = false;
+                }
+
                 var fn = Path.GetFileName(arg);
+                bool skip = SkipFile(fn);
                 if (requiredFiles.Contains(fn))
                 {
                     requiredFiles.Remove(fn);
                     if (!generateMasterRegexList && !main.CheckStockFileLists)
                         WriteLine($"Found required file '{fn}'");
                 }
-                else if (!generateMasterRegexList && !main.CheckStockFileLists && !SkipFile(fn)) { 
-                    WriteLine($"Found extra file '{fn}'.");                
+                else if (!generateMasterRegexList && !main.CheckStockFileLists && !skip)
+                {
+                    WriteLine($"Found extra file '{fn}'.");
                 }
                 if (!main.CheckStockFileLists)
                 {
-                    if(skipConfidential && confidential.Contains(fn) && !generateMasterRegexList)
+                    if (skipConfidential && confidential.Contains(fn) && !generateMasterRegexList)
                     {
                         WriteLine($"Skipping confidential file '{fn}'");
                     }
+                    else if (skip)
+                    {
+                        if (!generateMasterRegexList)
+                            WriteLine($"Skipping file '{fn}'");
+                    }
                     else
                     {
-                        main.LoadCSVDataFiles(backHistoryDayCount, maxEventAge, generateMasterRegexList, mapFileNameToColumnPosition, mapSymbolToFileNameToDates, mapFileNameToMostRecentFileDate, mapMostRecentDateToFile, ref columnCurrent, emptyDefaultValues, ref history, ref historyDates, fileNamesWithHistory, arg);
+                        csvDataFilesLoadList.Add(arg);
                     }
                 }
             }
             idxArgs++;
         }
+        
+
+        bool flowControl = ExitIfDownloadsDirectoryContainsParens();
+        if (!flowControl && !generateMasterRegexList)
+        {
+            WriteLine("Downloads directory files contain parentheses. Please remove them and try again.");
+            // exist with failure code
+            Environment.Exit(1);
+        }
+
+        // add the only the file name without the path and extension to the preferred files list
+        foreach (var file in new[] { masterStockListFilePath, masterETFListFilePath })
+        {
+            if (File.Exists(file))
+            {
+                var fileName = Path.GetFileName(file);
+                if (!string.IsNullOrEmpty(fileName) && !preferredFiles.Contains(fileName))
+                {
+                    preferredFiles.Add(fileName);
+                }
+            }
+            //if (!SkipFile(file)) requiredFiles.Add(file);
+            patSkipFiles.Add(new Regex(Regex.Escape(file)
+                //, RegexOptions.IgnoreCase
+                ));
+        }
+
+        try
+        {
+            main.MergeParseAndLoadMasterLists(maxEventAge, emptyDefaultValues, masterStockListFilePath, masterETFListFilePath);
+        }
+        catch (FileNotFoundException ex)
+        {
+            WriteLine($"Missing required file: {ex.FileName}");
+            return;
+        }
+
+        csvDataFilesLoadList.ForEach(fn =>
+            main.LoadCSVDataFiles(backHistoryDayCount, maxEventAge, generateMasterRegexList, /*main.mapSortOrderPrefixedFileNameToColumnPosition,*/ mapSymbolToFileNameToDates, mapFileNameToMostRecentFileDate, mapMostRecentDateToFile, ref columnCurrent, emptyDefaultValues, ref history, ref historyDates, fileNamesWithHistory, fn));
 
         if (requiredFiles.Count > 0 && !generateMasterRegexList)
         {
-            WriteLine($"{requiredFiles.Count} Required files not found: {string.Join(", ", requiredFiles)}"); 
-            if(main.CheckStockFileLists)
+            WriteLine($"{requiredFiles.Count} Required files not found: {string.Join(", ", requiredFiles)}");
+            if (main.CheckStockFileLists)
                 return;
         }
         else if (main.CheckStockFileLists && !generateMasterRegexList)
@@ -359,9 +553,10 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
             WriteLine("All required files found");
             return;
         }
- 
-        var masterSymbolListForWorksheet = main.MakeMasterSymbolListForWorksheet(mapFileNameToMostRecentFileDate, debug);
-        if (generateMasterRegexList) symbolListForMasterRegex = MakeSymbolListForMasterRegex(masterSymbolListForWorksheet);
+
+        /*SortedDictionary<string, SymbolInList>*/
+        main.masterSymbolListForWorksheet = main.MakeMasterSymbolListForWorksheet(mapFileNameToMostRecentFileDate, debug);
+        if (generateMasterRegexList) symbolListForMasterRegex = MakeSymbolListForMasterRegex(main.masterSymbolListForWorksheet);
         if (generateMasterRegexList && symbolListForMasterRegex.Count() > 0)
         {
             WriteLine(string.Join("|", symbolListForMasterRegex)
@@ -370,9 +565,11 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
         }
         var stStyles = "";
         var workSheetXML = new List<string>();
-        string[] fileNames = MakeFileNamesArray(mapFileNameToColumnPosition);
-        mapFileNameToFileNameNoExt = MakeMapFileNameToFileNameNoExt(fileNames);
-        var finalExcelOutputFilePath = ExpandEnvironmentVariables(@$"%USERPROFILE%\Downloads\CompareMarketSmithLists_{DateTime.Now.ToString("yyyy-MMM-dd-ddd-HH")}.{(generateCSV || generateMasterRegexList ? "csv" : "xml")}");
+        main.sortOrderPrefixedFileNames = MakeFileNamesArray(main.mapSortOrderPrefixedFileNameToColumnPosition); // main.mapSortOrderPrefixedFileNameToColumnPosition (keys only) populated in LoadCSVDataFiles
+        mapFileNameToColumnHeader = MakeMapFileNameToColumnHeader(main.sortOrderPrefixedFileNames);
+        var finalExcelOutputFilePath = string.IsNullOrEmpty(main.outputFileName) ? ExpandEnvironmentVariables(@$"%USERPROFILE%\Downloads\CompareMarketSmithLists_{DateTime.Now.ToString("yyyy-MMM-dd-ddd-HH")}.{(generateCSV || generateMasterRegexList ? "csv" : "xml")}") : ExpandEnvironmentVariables(main.outputFileName);
+        if (!generateMasterRegexList)
+            WriteLine($"finalOutputFilename = {finalExcelOutputFilePath}");
         var saveColumnCurrent = columnCurrent;
         var sbLegend = new StringBuilder();
         foreach (var worksheet in workSheets)
@@ -381,15 +578,15 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
             sbLegend.Append($"Sort by {worksheet.orderBy} {(string.IsNullOrEmpty(worksheet.colorCodedAttributeName) ? "" : $"-Color by {worksheet.colorCodedAttributeName}")}");
             sbLegend.Append("</Data></Cell></Row>\n");
         }
-        foreach(var (key, value) in flags)
+        foreach (var (key, value) in flags)
         {
-                sbLegend.Append("""<Row><Cell><Data ss:Type="String">""");
-                sbLegend.Append($"{key} = {value}");
-                sbLegend.Append("</Data></Cell></Row>\n");
+            sbLegend.Append("""<Row><Cell><Data ss:Type="String">""");
+            sbLegend.Append($"{key} = {value}");
+            sbLegend.Append("</Data></Cell></Row>\n");
         }
-        var legend=$"""
+        var legend = $"""
             <Worksheet ss:Name="Legend">
-             <Table ss:ExpandedColumnCount="1" ss:ExpandedRowCount="{workSheets.Count()+flags.Count()}" x:FullColumns="1"
+             <Table ss:ExpandedColumnCount="1" ss:ExpandedRowCount="{workSheets.Count() + flags.Count()}" x:FullColumns="1"
               x:FullRows="1" ss:DefaultRowHeight="15">
               <Column ss:AutoFitWidth="0" ss:Width="417"/>
               {sbLegend.ToString()}
@@ -418,23 +615,23 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
         {
             var sbXMLWorksheetRows = new StringBuilder();
             var xmlColumnWidths = new List<string> { """<Column ss:Width="15" />""" }; // why does the width have no affect?
-            int columnCount = GenerateXMLWorksheetColumnDeclarations(mapFileNameToColumnPosition, sbXMLWorksheetRows, sbCSV, xmlColumnWidths, fileNames);
+            int columnCount = main.GenerateXMLWorksheetColumnDeclarations(/*main.mapSortOrderPrefixedFileNameToColumnPosition,*/ sbXMLWorksheetRows, sbCSV, xmlColumnWidths/*, main.sortOrderPrefixedFileNames*/);
             var historyDirectoryDateArray = historyDates.ToArray<DateTime>().Reverse<DateTime>().ToArray<DateTime>(); // why do I have to reverse this since it was created with a descending comparitor?
             var rowCount = 0;
             columnCurrent = saveColumnCurrent;
-            main.GenerateXMLWorksheetDataRows(backHistoryDayCount, 
+            main.GenerateXMLWorksheetDataRows(backHistoryDayCount,
                 //main.mapFileNameToSymbolToDatesToAttributes, 
-                masterSymbolListForWorksheet, 
-                mapFileNameToColumnPosition, 
-                mapFileNameToFileNameNoExt, mapSymbolToFileNameToDates, sbXMLWorksheetRows, sbCSV, debug, ref rowCount, ref columnCurrent, excelStyles, fileNamesWithHistory, columnCount, historyDirectoryDateArray, mapAttributeNameToScreenTip, workSheet);
+                main.masterSymbolListForWorksheet,
+                //mapSortOrderPrefixedFileNameToColumnPosition,
+                mapFileNameToColumnHeader, mapSymbolToFileNameToDates, sbXMLWorksheetRows, sbCSV, debug, ref rowCount, ref columnCurrent, excelStyles, fileNamesWithHistory, columnCount, historyDirectoryDateArray, mapAttributeNameToScreenTip, workSheet);
             var columnHeaders = $"""<Cell ss:StyleID="s62"><Data ss:Type="String">Order</Data><NamedCell ss:Name="_FilterDatabase"/></Cell>"""
-                + $"""{string.Join("", (fileNames.OrderBy(fn => mapFileNameToColumnPosition[fn])).Select(fn => $"""<Cell ss:StyleID="s62"><Data ss:Type="String">{patAddSpaceNotesSwitch.Replace(mapFileNameToFileNameNoExt[fn], m => $"{m.Groups[1].Value} {m.Groups[2].Value}")}</Data><NamedCell ss:Name="_FilterDatabase"/></Cell>"""))} """
+                + $"""{string.Join("", (main.sortOrderPrefixedFileNames.OrderBy(fn => main.mapSortOrderPrefixedFileNameToColumnPosition[fn])).Select(fn => $"""<Cell ss:StyleID="s62"><Data ss:Type="String">{patAddSpaceNotesSwitch.Replace(mapFileNameToColumnHeader[fn], m => $"{m.Groups[1].Value} {m.Groups[2].Value}")}</Data><NamedCell ss:Name="_FilterDatabase"/></Cell>"""))} """
                 + "";
             columnHeaders += $"""{string.Join("", (mapPositionToAttributeName.Select(positionNamePair => $"""<Cell ss:StyleID="s62"><Data ss:Type="String">{positionNamePair.Value.displayName}</Data><NamedCell ss:Name="_FilterDatabase"/></Cell>""")))}""";
             columnCount += mapPositionToAttributeName.Count;
             rowCount++;
             columnCount++; // include the extra column for the current row
-            string workSheetDisplayName = ""+(++worksheetCount)+". "+ workSheetName + workSheet.orderBy.Trim() + (string.IsNullOrEmpty(workSheet.colorCodedAttributeName) ? "" : "-ColorBy" + workSheet.colorCodedAttributeName.Replace("/", ""));
+            string workSheetDisplayName = "" + (++worksheetCount) + ". " + workSheetName + workSheet.orderBy.Trim() + (string.IsNullOrEmpty(workSheet.colorCodedAttributeName) ? "" : "-ColorBy" + workSheet.colorCodedAttributeName.Replace("/", ""));
             if (workSheetDisplayName.Length > 31) workSheetDisplayName = workSheetDisplayName.Substring(0, 31); // Excel worksheet names are limited to 31 characters
             var len = workSheetDisplayName.Length;
             workSheetXML.Add(ComposeWorkSheet(initialRow, sbXMLWorksheetRows.ToString(), workSheetDisplayName, rowCount, xmlColumnWidths, verticalSplitter, columnCount, columnHeaders));
@@ -521,6 +718,12 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
                <Alignment ss:Vertical="Center" ss:WrapText="1"/>
                <Font ss:FontName="Calibri" x:Family="Swiss" ss:Size="11" ss:Color="#FF0000"/>
               </Style>
+              <Style ss:ID="s75Percent" ss:Parent="s68">
+                <NumberFormat ss:Format="Percent"/>
+              </Style>
+              <Style ss:ID="s76Comma" ss:Name="Comma">
+                <NumberFormat ss:Format="_(* #,##0.00_);_(* \(#,##0.00\);_(* &quot;-&quot;??_);_(@_)"/>
+              </Style>
               {stStyles}
              </Styles>
 
@@ -551,9 +754,12 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
                     done = true;
                 }
             }
-            //WriteLine($"files processed={string.Join(",\n", mapFileNameToColumnPosition.Keys.Select(f=>$"@\"{f}\"").ToList())}");
-            var excel = ExpandEnvironmentVariables(@"%MSOFFICE%\EXCEL.EXE");
-            Process.Start(excel, $"/s \"{finalExcelOutputFilePath}\"");
+            //WriteLine($"files processed={string.Join(",\n", mapSortOrderPrefixedFileNameToColumnPosition.Keys.Select(fileName=>$"@\"{fileName}\"").ToList())}");
+
+            //var excel = ExpandEnvironmentVariables(@"%MSOFFICE%\EXCEL.EXE");
+            //Process.Start(excel, $"/s \"{finalExcelOutputFilePath}\"");
+
+
             // add Microsoft.Office.Interop.Excel.Application to this project
             // add Microsoft.Office.Interop.Excel to the project references
 
@@ -572,120 +778,94 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
             workbook.Close();
             */
 
+            // exit with success code
+            Environment.Exit(0);
+
+
         }
     }
 
-    //private static bool SortMultipleWorksheets(Microsoft.Office.Interop.Excel.Workbook workbook, Microsoft.Office.Interop.Excel.Application excel)
-    //{
-    //    excel.Visible = true;
-    //    // get the list of worksheets
-    //    var worksheets = workbook.Worksheets;
-    //    // loop through the worksheets
-    //    foreach (Microsoft.Office.Interop.Excel.Worksheet worksheet in worksheets)
-    //    {
-    //        // get the name of the worksheet
-    //        var worksheetName = worksheet.Name;
-    //        // check if the worksheet name is "Legend"
-    //        if (worksheetName == "2. Sort by Price % Chg-ColorByD")
-    //        {
-    //            // set the worksheet to be the active sheet
-    //            worksheet.Activate();
-    //            // set the zoom level to 100%
-    //            excel.ActiveWindow.Zoom = 100;
-    //            // set the view to be normal
-    //            excel.ActiveWindow.View = Microsoft.Office.Interop.Excel.XlWindowView.xlNormalView;
-    //            // get the range of cells in the worksheet
-    //            var range = worksheet.UsedRange;
-    //            // get the list of data filters
-    //            var filters = worksheet.AutoFilter;
-    //            // get the number of rows and columns in the worksheet
-    //            var rows = range.Rows.Count;
-    //            var columns = range.Columns.Count;
-    //            // get the values of all of the cells in the first row
-    //            var values = range.Cells[1, 1] as Microsoft.Office.Interop.Excel.Range;
-    //            // find all the cells in the first row that contain text values beginning with "Schwab"
-    //            var cells = worksheet.Cells[1, 1] as Microsoft.Office.Interop.Excel.Range;
-    //            // Find all the cells in the first row that contain text values beginning with "Schwab"
-    //            SortWorkSheet(excel, worksheet, cells, "Watch");
-    //        }
-    //    }
-
-    //    return true;
-    //}
-
-    //private static bool SortWorkSheet(Microsoft.Office.Interop.Excel.Application excel, Microsoft.Office.Interop.Excel.Worksheet worksheet, Microsoft.Office.Interop.Excel.Range? cells, object searchPattern)
-    //{
-    //    var found = false;
-    //    var done = false;
-    //    while (!done)
-    //    {
-    //        try
-    //        {
-    //            // find the first cell that contains "Schwab"
-    //            var cell = cells.Find(
-    //                searchPattern,
-    //                Type.Missing,
-    //                Type.Missing,
-    //                Microsoft.Office.Interop.Excel.XlLookAt.xlPart,
-    //                Microsoft.Office.Interop.Excel.XlSearchOrder.xlByRows,
-    //                Microsoft.Office.Interop.Excel.XlSearchDirection.xlNext,
-    //                false,
-    //                Type.Missing,
-    //                Type.Missing
-    //            );
-    //            // if a cell was found, select it
-    //            if (cell != null)
-    //            {
-    //                found = true;
-    //                cell.Select();
-    //                // set the zoom level to 100%
-    //                excel.ActiveWindow.Zoom = 100;
-    //                // set the view to be normal
-    //                excel.ActiveWindow.View = Microsoft.Office.Interop.Excel.XlWindowView.xlNormalView;
-    //                // get the range of cells in the worksheet
-    //                var range = worksheet.UsedRange;
-    //                // get the list of data filters
-    //                var filter = worksheet.AutoFilter;
-    //                // get the number of rows and columns in the worksheet
-    //                var rowCount = range.Rows.Count;
-    //                var columnCount = range.Columns.Count;
-    //                // sort the worksheet by this column
-    //                worksheet.Sort.SortFields.Clear();
-    //                worksheet.Sort.SortFields.Add(cell, Microsoft.Office.Interop.Excel.XlSortOn.xlSortOnValues, Microsoft.Office.Interop.Excel.XlSortOrder.xlAscending, Type.Missing, Type.Missing);
-    //                worksheet.Sort.SetRange(range);
-    //                worksheet.Sort.Header = Microsoft.Office.Interop.Excel.XlYesNoGuess.xlYes;
-    //                worksheet.Sort.MatchCase = false;
-    //                worksheet.Sort.Orientation = Microsoft.Office.Interop.Excel.XlSortOrientation.xlSortColumns;
-    //                worksheet.Sort.SortMethod = Microsoft.Office.Interop.Excel.XlSortMethod.xlPinYin;
-    //                worksheet.Sort.Apply();
-    //            }
-    //            else
-    //            {
-    //                done = true;
-    //            }
-    //        }
-    //        catch (System.Runtime.InteropServices.COMException ex)
-    //        {
-    //            WriteLine($"Error finding cell {ex.Message}, trying again");
-    //            Thread.Sleep(1000);
-    //        }
-    //    }
-    //    return found;
-    //}
-
-    void LoadCSVDataFiles(int backHistoryDayCount, int maxEventAge, bool generateMasterRegexList, SortedDictionary<string, int> mapFileNameToColumnPosition, AutoMultiDimSortedDictionary<string, AutoInitSortedDictionary<string, SortedSet<DateTime>>> mapSymbolToFileNameToDates, SortedDictionary<string, DateTime> mapFileNameToMostRecentFileDate, SortedDictionary<DateTime, string> mapMostRecentDateToFile, ref int columnCurrent, AutoMultiDimSortedDictionary<string, AutoMultiDimSortedDictionary<DateTime, AutoInitSortedDictionary<string, string>>>? emptyDefaultValues, ref IEnumerable<History> history, ref SortedSet<DateTime> historyDates, SortedSet<string> fileNamesWithHistory, string arg)
+    private static void ConditionallyAddUnversionedFileNameToSkipList(string fn)
     {
-        //var fileNames = ExpandFilePaths(arg);
-        var fileName = ExpandEnvironmentVariables(arg);
+        var m = patFileNameHasVersion.Match(Path.GetFileName(fn));
+        if (m.Success)
+        {
+            var noVersionFileName = m.Groups[1].Value + m.Groups[3].Value;
+            patSkipFiles.Add(new Regex("^" + Regex.Escape(noVersionFileName) + "$")); // skip the unversioned file if the versioned file is present
+            if (!generateMasterRegexList)
+                WriteLine($"adding unversioned file {noVersionFileName} to the skip list");
+        }
+    }
+
+    static bool ExitIfDownloadsDirectoryContainsParens()
+    {
+        // Enumerate all the files in the Downloads directory and exit if any of the file names contain parentheses.
+        // This is to prevent the user from running this program with a file name that contains parentheses.
+        var downloadsDirectory = ExpandEnvironmentVariables(@"%USERPROFILE%\Downloads");
+        if (Directory.Exists(downloadsDirectory))
+        {
+            var files = Directory.EnumerateFiles(downloadsDirectory, "*.csv", SearchOption.TopDirectoryOnly)
+                //.Where(fileName => !SkipFile(Path.GetFileName(fileName)))
+                ;
+            foreach (var file in files)
+            {
+                var fileName = Path.GetFileName(file);
+                if(fileName.Contains("MinDollarVol10MComp50ETF") // special master list
+                   || fileName.Contains("MinDollarVol10MComp50") // special master list
+                   || fileName.Contains("Top Rated Growth Funds") // skipped
+                   || fileName.Contains("Top Rated Value Funds")  // skipped
+                   || fileName.Contains("Top 25 Sector Funds Over 3 Years") // skipped @@todo@@ check the skip list instead of hard coding these!
+                   || fileName.Contains("Top 25 Funds Over 10 years") // skipped
+                   || fileName.Contains("ETF Indicies"))          // used (maybe) but we ignore the parens
+                {
+                    // skip these files: we have special logic to handle these files when they include parentheses
+                    continue;
+                }
+                if (fileName.Contains('(') || fileName.Contains(')'))
+                {
+                    WriteLine($"Error: File name '{fileName}' contains parentheses. Please rename the file and try again.");
+                    return false;
+                }
+            }
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// Merges master lists of values from two CSV files based on a specified event age and optional default values. This is necessary because of a constraint with MarketSurge
+    /// </summary>
+    /// <param name="maxEventAge">Specifies the maximum age of events to consider when merging data.</param>
+    /// <param name="emptyDefaultValues">Provides a structure for default values that can be used if no data is found.</param>
+    /// <param name="defaultValuesFileName">Indicates the file name of the CSV containing default values to be parsed.</param>
+    /// <param name="defaultETFValuesFileName">Indicates the file name of the CSV containing ETF default values to be parsed.</param>
+    void MergeParseAndLoadMasterLists(int maxEventAge, AutoMultiDimSortedDictionary<string, AutoMultiDimSortedDictionary<DateTime, AutoInitSortedDictionary<string, string>>>? emptyDefaultValues, string defaultValuesFileName, string defaultETFValuesFileName)
+    {
+        if(!generateMasterRegexList && !CheckStockFileLists)
+            WriteLine($"Merging master lists from {defaultValuesFileName} and {defaultETFValuesFileName} with maxEventAge={maxEventAge}");
+        defaultTodayValues = ParseCSV(defaultValuesFileName, ExtractDateTimeFromFilePath(defaultValuesFileName).Date, emptyDefaultValues, maxEventAge);
+        defaultTodayETFValues = ParseCSV(defaultETFValuesFileName, ExtractDateTimeFromFilePath(defaultValuesFileName).Date, emptyDefaultValues, maxEventAge);
+        foreach (var (symbol, mapDatesToMetrics) in defaultTodayETFValues)
+            foreach (var (date, mapMetrics) in mapDatesToMetrics)
+                foreach (var (metric, value) in mapMetrics)
+                    defaultTodayValues[symbol][date][metric] = value;
+        if (!generateMasterRegexList && !CheckStockFileLists)
+            WriteLine($"Complete: Loaded {defaultTodayValues.Count} symbols with {defaultTodayValues.Values.SelectMany(d => d.Keys).Count()} dates from {defaultValuesFileName} and {defaultETFValuesFileName}");
+    }
+
+    void LoadCSVDataFiles(int backHistoryDayCount, int maxEventAge, bool generateMasterRegexList/*, SortedDictionary<string, int> mapSortOrderPrefixedFileNameToColumnPosition*/, AutoMultiDimSortedDictionary<string, AutoInitSortedDictionary<string, SortedSet<DateTime>>> mapSymbolToFileNameToDates, SortedDictionary<string, DateTime> mapFileNameToMostRecentFileDate, SortedDictionary<DateTime, string> mapMostRecentDateToFile, ref int columnCurrent, AutoMultiDimSortedDictionary<string, AutoMultiDimSortedDictionary<DateTime, AutoInitSortedDictionary<string, string>>>? emptyDefaultValues, ref IEnumerable<History> history, ref SortedSet<DateTime> historyDates, SortedSet<string> fileNamesWithHistory, string fileName)
+    {
+        //var sortOrderPrefixedFileNames = ExpandFilePaths(fileName);
+        fileName = ExpandEnvironmentVariables(fileName);
         var skip = SkipFile(fileName);
 
-        if (System.IO.File.Exists(fileName) && !skip)
+        if (File.Exists(fileName) && !skip)
         {
             try
             {
                 //DateTime lastWriteTime = System.IO.File.GetLastWriteTime(fileName);
                 var listDateTime = ExtractDateTimeFromFilePath(fileName);
-                AutoMultiDimSortedDictionary<string/*symbol*/, AutoMultiDimSortedDictionary<DateTime, AutoInitSortedDictionary<string/*metric name*/, string/*metric value*/>>> csvCurrentData = ParseCSV(fileName, listDateTime, defaultTodayValues, maxEventAge);
+                AutoMultiDimSortedDictionary<string/*symbol*/, AutoMultiDimSortedDictionary<DateTime, AutoInitSortedDictionary<string/*ageMetric name*/, string/*ageMetric value*/>>> csvCurrentData = ParseCSV(fileName, listDateTime, defaultTodayValues, maxEventAge);
                 if (!generateMasterRegexList)
                 {
                     if(csvCurrentData.Count == 0)
@@ -694,7 +874,7 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
                         return;
                     }
                     WriteLine($"Loaded file {fileName} with {csvCurrentData.Count} symbols and {csvCurrentData.Values.SelectMany(d => d.Keys).Count()} dates");
-                }
+                }               
                 fileName = Path.GetFileName(fileName);
                 if (generateMasterRegexList)
                     history = new List<History>();
@@ -734,8 +914,12 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
                             fileNamesWithHistory.Add(fn);
                         }
                     }
-                }
-                mapFileNameToColumnPosition[fileName] = 0; // All filenames are in column zero for now, fix this later
+                }                
+                var sortOrderPrefixedFileName = MaybeAddSortOrderPrefix(fileName);
+                mapSortOrderPrefixedFileNameToColumnPosition[sortOrderPrefixedFileName] = 0; // Populate values later
+                mapSortOrderPrefixedFileNameToFileName[sortOrderPrefixedFileName] = fileName;
+                mapFileNameToSortOrderPrefixedFileName[fileName]= sortOrderPrefixedFileName;
+				
                 columnCurrent++;
             }
             catch (IOException ex)
@@ -749,7 +933,7 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
         }
     }
     static string ComposeWorkSheet(string initialRow, string XMLWorksheetRows, string workSheetName, int rowCount, List<string> xmlColumnWidths, bool verticalSplitter, int columnCount, string columnHeaders)
-    {
+    { // height was 230.25
         return $"""
              <Worksheet ss:Name="{workSheetName}">
                <Names>            
@@ -757,7 +941,7 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
                </Names>
                <Table ss:ExpandedColumnCount="{columnCount}" ss:ExpandedRowCount="{rowCount}" x:FullColumns="1" x:FullRows="1" ss:DefaultColumnWidth="42" ss:DefaultRowHeight="11.25">
                  {string.Join("", xmlColumnWidths)}
-                 <Row ss:Height="230.25">
+                 <Row ss:Height="62.25">
                    {columnHeaders}
                  </Row>
                  {XMLWorksheetRows}
@@ -777,7 +961,7 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
                <Selected/>
              """ + (verticalSplitter ?
           $""""
-               <SplitHorizontal>4905</SplitHorizontal>
+               <SplitHorizontal>1545</SplitHorizontal>
                <TopRowBottomPane>1</TopRowBottomPane>
                <SplitVertical>26820</SplitVertical>
                <LeftColumnRightPane>13</LeftColumnRightPane>
@@ -802,7 +986,7 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
                </Panes>
                """" :
            $""""
-               <SplitHorizontal>4830</SplitHorizontal>
+               <SplitHorizontal>1545</SplitHorizontal>
                <TopRowBottomPane>{initialRow}</TopRowBottomPane>
                <ActivePane>2</ActivePane>
                <Panes>
@@ -817,7 +1001,7 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
                  <ActiveCol>1</ActiveCol>
                 </Pane>
                </Panes>
-               <SplitHorizontal>4830</SplitHorizontal>
+               <SplitHorizontal>1545</SplitHorizontal>
                <TopRowBottomPane>{initialRow}</TopRowBottomPane>
                <ActivePane>2</ActivePane>
                <Panes>
@@ -853,6 +1037,12 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
         return symbolListForMasterRegex;
     }
 
+    static readonly Regex patIbdLiveWatchReadyList = new Regex(@"^(IBD Live)\s*(Ready|Watch)\.csv");
+    static readonly Regex patLargeMidSmallCap = new Regex(@"^(Large|Mid|Small) Cap\.csv");
+    static readonly Regex patStartsWithIbd = new Regex(@"^IBD");
+    static readonly Regex patIPO = new Regex(@"IPO");
+    static readonly Regex patSchwabAccountPositions = new Regex(@"^(sss) (.*)\.csv$");
+
     SortedDictionary<string, SymbolInList> MakeMasterSymbolListForWorksheet(SortedDictionary<string, DateTime> mapFileNameToMostRecentFileDate, bool debug)
     {
         SortedDictionary<string, SymbolInList> masterSymbolListForWorksheet = new();
@@ -880,6 +1070,33 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
         return masterSymbolListForWorksheet;
     }
 
+    /// <summary>
+    /// Conditionally Adds a sort order prefix to a file name based on specific patterns. These will be stripped off when converting the file name to a column header name.
+    /// </summary>
+    /// <param name="fileName">The input string representing the file name to potentially modify.</param>
+    /// <returns>The modified file name with an added sort order prefix if applicable.</returns>
+    private static string MaybeAddSortOrderPrefix(string fileName)
+    {
+        if (patIbdLiveWatchReadyList.Match(fileName).Success)
+            // add digits to sort order prefix for Schwab account position to order columns with in the group of columns for the Schwab account positions
+            fileName = patIbdLiveWatchReadyList.Replace(fileName, m => $"uuu {m.Groups[1].Value} {m.Groups[2].Value}");
+        else if (patLargeMidSmallCap.Match(fileName).Success)
+            fileName = patLargeMidSmallCap.Replace(fileName, m => $"qqq {m.Groups[1].Value} Cap");
+        else if (fileName.Contains("RS Line"))
+            fileName = "bbb " + fileName; // add a sort order prefix for RS Line files
+        else if (patStartsWithIbd.Match(fileName).Success)
+            fileName = "ttt " + fileName; // add a sort order prefix for IBD files
+        else if (patIPO.Match(fileName).Success)
+            fileName = "iii " + fileName; // add a sort order prefix for IPO files
+        else if (fileName == "buy.csv")
+            fileName = "www buy.csv"; // group this next to the watch list 
+        else if (patSchwabAccountPositions.Match(fileName).Success)
+        {
+            fileName = patSchwabAccountPositions.Replace(fileName, m => $@"{m.Groups[1].Value}000 {m.Groups[2].Value}");
+        }
+        return fileName;
+    }
+
     static string[] MakeFileNamesArray(SortedDictionary<string, int> mapFileNameToColumnPosition)
     {
         var columnCount = 0;
@@ -903,23 +1120,51 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
     }
     void GenerateXMLWorksheetDataRows(int BACK_HISTORY_COUNT, 
         //AutoMultiDimSortedDictionary<string, AutoMultiDimSortedDictionary<string, AutoMultiDimSortedDictionary<DateTime, AutoInitSortedDictionary<string, string>>>> mapFileNameToSymbolToDatesToAttributes, 
-        SortedDictionary<string, SymbolInList> comparisonGrid, SortedDictionary<string, int> mapFileNameToColumnPosition, SortedDictionary<string, string> mapFileNameToFileNameNoExt, AutoMultiDimSortedDictionary<string, AutoInitSortedDictionary<string, SortedSet<DateTime>>> mapSymbolToFileNameToDates, StringBuilder sbXMLWorksheetRows, StringBuilder sbCSV, bool debug, ref int rowCount, ref int columnCurrent, AutoInitSortedDictionary<string, ExcelStyle> excelStyles, SortedSet<string> fileNamesWithHistory, int columnCount, DateTime[] historyDirectoryDateArray, Dictionary<string, (bool tip, string displayName, Func<string, string> convert)> mapAttributeNameToScreenTip, (string orderBy, string colorCodedAttributeName) workSheet)
+        SortedDictionary<string, SymbolInList> masterSymbolListForWorksheet, 
+        //SortedDictionary<string, int> mapSortOrderPrefixedFileNameToColumnPosition, 
+        SortedDictionary<string, string> mapFileNameToFileNameNoExt, 
+        AutoMultiDimSortedDictionary<string, AutoInitSortedDictionary<string, SortedSet<DateTime>>> mapSymbolToFileNameToDates, 
+        StringBuilder sbXMLWorksheetRows,
+        StringBuilder sbCSV, bool debug, ref int rowCount, ref int columnCurrent, 
+        AutoInitSortedDictionary<string, ExcelStyle> excelStyles, 
+        SortedSet<string> fileNamesWithHistory, int columnCount, 
+        DateTime[] historyDirectoryDateArray, 
+        Dictionary<string, (bool tip, string displayName, Func<string, string> convert)> mapAttributeNameToScreenTip, 
+        (string orderBy, string colorCodedAttributeName) workSheet)
     {
-        foreach (var equitySymbol in comparisonGrid.Keys.Where(s => !string.IsNullOrEmpty(s)))
+        foreach (var equitySymbol in masterSymbolListForWorksheet.Keys.Where(s => !string.IsNullOrEmpty(s))) // for each row (one equity symbol per row)
         {
             var symbol= equitySymbol;
             columnCurrent = 0;
 
-            sbXMLWorksheetRows.AppendLine("""  <Row ss:AutoFitHeight="0">""");
+            sbXMLWorksheetRows.AppendLine("""  <Row ss:AutoFitHeight="0">"""); // begin row
             sbXMLWorksheetRows.AppendLine($"""    <Cell><Data ss:Type="Number">{rowCount + 1}</Data><NamedCell ss:Name="_FilterDatabase"/></Cell>""");
             bool skipOverBlankColumn = false;
             AutoMultiDimSortedDictionary<string/*fileName*/, AutoMultiDimSortedDictionary<string/*symbol*/, AutoInitSortedDictionary<string, string>>> latestAttributes = new();
             var latestFileNameForThisSymbol = string.Empty;
-            var latestFileNamesSetsForThisSymbol = new DataFileCatagories(new SortedSet<string>(), new SortedSet<string>(), new SortedSet<string>());
-            foreach (var fileName in DescendingComparer<string>.reverse ? comparisonGrid[symbol].Lists.Reverse() : comparisonGrid[symbol].Lists)
+            //var latestFileNamesSetsForThisSymbol = new DataFileCatagories(new SortedSet<string>(), new SortedSet<string>(), new SortedSet<string>());
+
+            // Each input data file contains two columns: the first column is the
+            // symbol name and the second column is an attribute of
+            // that symbol such as the current price or average true
+            // value. The header row for the column tells us the
+            // attribute name. The attribute name must be contained in
+            // the file name. This file has been read into a
+            // dictionary that becomes manifest as a single
+            // spreadsheet column.
+
+
+            //foreach (var fileName in DescendingComparer<string>.reverse ? masterSymbolListForWorksheet[symbol].Lists.Reverse() : masterSymbolListForWorksheet[symbol].Lists) // for each column
+            //SortedSet<string> filesWithSymbolsInThisRow = new();
+            //masterSymbolListForWorksheet[symbol].Lists.ToList().ForEach(fileName => filesWithSymbolsInThisRow.Add(mapFileNameToSortOrderPrefixedFileName[fileName]));
+            //foreach ((var sortOrderPrefixedFileName,var fileName) in mapSortOrderPrefixedFileNameToFileName)
+            //foreach(var sortOrderPrefixedFileName in filesWithSymbolsInThisRow)
+            foreach(var fileName in masterSymbolListForWorksheet[symbol].Lists.OrderBy(fn => mapFileNameToSortOrderPrefixedFileName[fn]))
             {
+                //var fileName = mapSortOrderPrefixedFileNameToFileName[sortOrderPrefixedFileName];
                 latestFileNameForThisSymbol = fileName;
-                var index = mapFileNameToColumnPosition[fileName];
+                var fileNameWithSortOrderPrefix = mapFileNameToSortOrderPrefixedFileName[fileName];// MaybeAddSortOrderPrefix(fileName);
+                var index = mapSortOrderPrefixedFileNameToColumnPosition[fileNameWithSortOrderPrefix]; // @@todo@@ abandon mapSortOrderPrefixedFileNameToColumnPosition and just use the order of the keys in mapSortOrderPrefixedFileNameToFileName and increment index every iteration
                 if (debug) WriteLine($"fileName={fileName} index={index}");
                 while (columnCurrent < index)
                 {
@@ -939,14 +1184,22 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
                     var matchGroups = patGroup.Match(fileName);
                     var matchGroupSymbol = patSymbolName.Match(fileName);
                     var matchDecoratedSymbol = patDecoratedSymbol.Match(fileName);
+                    var matchAtr21Day = patAtr21Day.Match(fileName);
+                    var matchNetLiqPercent = patNetLiqPercent.Match(fileName);
                     var matchAccounts = patAccount.Match(fileName);
-                    var latest = mapFileNameToSymbolToDatesToAttributes[fileName][symbol].Keys.OrderByDescending(d => d).ToArray<DateTime>()[0];
-                    var first = mapFileNameToSymbolToDatesToAttributes[fileName][symbol].Keys.FirstOrDefault();
+                    var equityAttributes = mapFileNameToSymbolToDatesToAttributes[fileName][symbol];
+                    var attributeKeys = equityAttributes.Keys;
+                    var latest = attributeKeys.OrderByDescending(d => d).ToArray<DateTime>()[0];
                     if (matchNotes.Success)
                     {
                         var name = matchNotes.Groups[2].Value;
                         var formulas = matchNotes.Success ? matchNotes.Groups[3].Value == "Formulas" : false;
-                        var stock = mapFileNameToSymbolToDatesToAttributes[fileName][symbol][latest];
+                        var nakedSymbol = symbol;
+                        if (mapFileNameToSymbolToDatesToAttributes[fileName].ContainsKey(symbol))
+                            nakedSymbol = symbol;
+                        else
+                            nakedSymbol = symbol.Contains(":") ? symbol.Split(':')[^1] : symbol; // accommodate symbols from ExtractTOSStockGroups.py that prefix the symbol with the account name and equity group name seperated by colons
+                        var stock = mapFileNameToSymbolToDatesToAttributes[fileName][nakedSymbol][latest];
                         if(stock.ContainsKey($"{name}Notes"))
                         {
                             var notes = stock[$"{name}Notes"]; // notes may contain a single comment, a single formula, or multiple notes
@@ -972,6 +1225,22 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
                         var stock = mapFileNameToSymbolToDatesToAttributes[fileName][symbol][latest];
                         var account = stock["Account"];
                         var line = $"""    <Cell{skipToIndex}><Data ss:Type="String">{account}</Data><NamedCell ss:Name="_FilterDatabase"/></Cell><!-- col={columnCurrent} fn={fileName}-->""";
+                        sbXMLWorksheetRows.AppendLine(line);
+                    }
+                    else if (matchAtr21Day.Success)
+                    {
+                        var stock = mapFileNameToSymbolToDatesToAttributes[fileName][symbol][latest];
+                        var name = matchAtr21Day.Groups[3].Value;
+                        var atr21day = stock[name];
+                        var line = $"""    <Cell{skipToIndex} ss:StyleID="s75Percent"><Data ss:Type="Number">{atr21day}</Data><NamedCell ss:Name="_FilterDatabase"/></Cell><!-- col={columnCurrent} fn={fileName}-->""";
+                        sbXMLWorksheetRows.AppendLine(line);
+                    }
+                    else if (matchNetLiqPercent.Success)
+                    {
+                        var stock = mapFileNameToSymbolToDatesToAttributes[fileName][symbol][latest];
+                        var name = matchNetLiqPercent.Groups[3].Value;
+                        var netliqpercent = stock[name];
+                        var line = $"""    <Cell{skipToIndex} ss:StyleID="s75Percent"><Data ss:Type="Number">{netliqpercent}</Data><NamedCell ss:Name="_FilterDatabase"/></Cell><!-- col={columnCurrent} fn={fileName}-->""";
                         sbXMLWorksheetRows.AppendLine(line);
                     }
                     else if (matchGroups.Success)
@@ -1018,6 +1287,9 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
                             else
                                 style = " ss:StyleID=\"s72\"";
                         }
+                        else {
+                            style = " ss:StyleID=\"s76Comma\""; 
+                        }
                         var line = $"""    <Cell{skipToIndex}{style}><Data ss:Type="Number">{sharesOrProfitLossOrUnitCost}</ss:Data><NamedCell ss:Name="_FilterDatabase"/></Cell><!-- col={columnCurrent} fn={fileName}-->""";
                         sbXMLWorksheetRows.AppendLine(line);
                     }
@@ -1027,7 +1299,7 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
                         if (matchDecoratedSymbol.Success)
                         {
                             var stock = mapFileNameToSymbolToDatesToAttributes[fileName][symbol][latest];
-                            displaySymbol = stock["DecoratedSymbol"];  // decorated symbols are color coded and have a prefix metric so you can sort by the metric (such as days until earnings)
+                            displaySymbol = stock["DecoratedSymbol"];  // decorated symbols are color coded and have a prefix ageMetric so you can sort by the ageMetric (such as days until earnings)
                         }
                         // The most recent csv files are in the Download directory.
                         // Older copies of the files are in sub-directories of the Download directory whose names contains the date.
@@ -1074,8 +1346,8 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
                             }
                             count++;
                         }
-                        latestAttributes[symbol][fileName] = mapFileNameToSymbolToDatesToAttributes[fileName][symbol][latest];
-                        var attributeTable = mapFileNameToSymbolToDatesToAttributes[fileName][symbol][latest];
+                        AutoInitSortedDictionary<string, string> attributeTable = mapFileNameToSymbolToDatesToAttributes[fileName][symbol][latest];
+                        latestAttributes[symbol][fileName] = attributeTable;
                         var screenTip = string.Join(",", attributeTable
                             .Where(e => !string.IsNullOrEmpty(e.Value) && e.Key != "seq" && isScreenTip(e.Key, mapAttributeNameToScreenTip))
                             .Select(e => mapAttributeNameToScreenTip.ContainsKey(e.Key) ? $"""{mapAttributeNameToScreenTip[e.Key].displayName}={patRemoveLeadingZeros.Replace(mapAttributeNameToScreenTip[e.Key].convert(e.Value), m => m.Groups[2].Value)}""" : $"""{e.Key}={e.Value}"""));
@@ -1084,22 +1356,22 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
                         var styleName2 = "s68";
                         if (age != 0 /*&& fileNamesWithHistory.Contains(fileName)*/)
                         {
-                            var metric = 1.0 * age / (BACK_HISTORY_COUNT + 1);
-                            metric = Math.Log(metric * (BACK_HISTORY_COUNT + 1)) / Math.Log(BACK_HISTORY_COUNT + 1);
+                            var ageMetric = 1.0 * age / (BACK_HISTORY_COUNT + 1);
+                            ageMetric = Math.Log(ageMetric * (BACK_HISTORY_COUNT + 1)) / Math.Log(BACK_HISTORY_COUNT + 1);
                             // @@todo@@: replace this with a Dictionary<string, Func<AutoInitSortedDictionary<string, string>, string>> so we can add new color coding metrics easily
                             if (workSheet.colorCodedAttributeName == "Ind Group Rank") ColorCodeBy_Ind_Group_Rank(attributeTable);
                             else if (workSheet.colorCodedAttributeName == "Comp Rating") ColorCodeBy_Comp_Rating(attributeTable, "Comp Rating");
                             else if (workSheet.colorCodedAttributeName == "RS Rating") ColorCodeBy_Comp_Rating(attributeTable, "RS Rating");
                             else if (workSheet.colorCodedAttributeName == "EPS Rating") ColorCodeBy_Comp_Rating(attributeTable, "EPS Rating");
-                            else if (workSheet.colorCodedAttributeName == "Up/Down Vol") ColorCodeBy_Metric(attributeTable, "Up/Down Vol");  //ColorCodeBy_UpDown_Rating(attributeTable, "Up/Down Vol");
-                            else if (workSheet.colorCodedAttributeName == "ROE") ColorCodeBy_Metric(attributeTable, "ROE");
-                            else if (workSheet.colorCodedAttributeName == "Price % Chg") ColorCodeBy_Metric(attributeTable, "Price % Chg");
-                            else if (workSheet.colorCodedAttributeName == "Daily Closing Range") ColorCodeBy_Metric(attributeTable, "Daily Closing Range");
-                            else if (workSheet.colorCodedAttributeName == "Weekly Closing Range") ColorCodeBy_Metric(attributeTable, "Weekly Closing Range");
+                            else if (workSheet.colorCodedAttributeName == "Up/Down Vol") ColorCodeHueByMetric(attributeTable, "Up/Down Vol");  //ColorCodeBy_UpDown_Rating(attributeTable, "Up/Down Vol");
+                            else if (workSheet.colorCodedAttributeName == "ROE") ColorCodeHueByMetric(attributeTable, "ROE");
+                            else if (workSheet.colorCodedAttributeName == "Price % Chg") ColorCodeHueByMetric(attributeTable, "Price % Chg");
+                            else if (workSheet.colorCodedAttributeName == "Daily Closing Range") ColorCodeHueByMetric(attributeTable, "Daily Closing Range");
+                            else if (workSheet.colorCodedAttributeName == "Weekly Closing Range") ColorCodeHueByMetric(attributeTable, "Weekly Closing Range");
                             else if (workSheet.colorCodedAttributeName == "Market Cap (mil)") ColorCodeBy_MarketCap(attributeTable, "Market Cap (mil)");
                             else if (string.IsNullOrEmpty(workSheet.colorCodedAttributeName)) ColorCodeBy_Dollar_Volume(attributeTable);
-                            else ColorCodeBy_Metric(attributeTable, workSheet.colorCodedAttributeName);
-                            stockExcelSaturationAgeStyle.InputMetric = metric;
+                            else ColorCodeHueByMetric(attributeTable, workSheet.colorCodedAttributeName);
+                            stockExcelSaturationAgeStyle.InputMetric = ageMetric;
                             var RGBHexColor = stockExcelSaturationAgeStyle.ColorHexRGB; // add pattern here for dollar volume
                             ExcelStyle style;
                             if (attributeTable.ContainsKey("50-Day Avg $ Vol (1000s)") && !string.IsNullOrEmpty(attributeTable["50-Day Avg $ Vol (1000s)"]))
@@ -1150,7 +1422,7 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
                                 excelStyles[RGBHexColor] = style;
                                 styleName2 = "s" + RGBHexColor;
                             }
-                            if (debug1) WriteLine($"f={fileName} symbol={symbol} age={age} metric={metric}");
+                            if (debug1) WriteLine($"fileName={fileName} symbol={symbol} age={age} ageMetric={ageMetric}");
                         }
                         var seqNoAndSymbol = "";
                         if (fileName.Contains("IBD 50 Index")) // special case because this list is always in the same order
@@ -1161,6 +1433,7 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
                             seqNoAndSymbol = $"{age.ToString("000")} {displaySymbol}";
                         else
                         {
+                            //System.Diagnostics.Debugger.Break(); // this is a bug, we should never get here
                             var attrValue = mapFileNameToSymbolToDatesToAttributes[fileName][symbol][latest][workSheet.orderBy];
                             if (!string.IsNullOrEmpty(attrValue) && mapAttributeNametoAttributeAttributes.ContainsKey(workSheet.orderBy) && mapAttributeNametoAttributeAttributes[workSheet.orderBy].numeric && mapAttributeNametoAttributeAttributes[workSheet.orderBy].orderByConvert != null)
                             {
@@ -1182,23 +1455,21 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
                 }
                 columnCurrent++;
             }
-            // add other stock metrics here
-            /**/
+
+            // add other stock metrics here. Unlike the other spreadsheet columns these do not come from a single file.            
 
             rowCount++;
-            var styleName = "s68";
             columnCurrent = mapFileNameToFileNameNoExt.Keys.Count;
             var metricCells = ""; skipOverBlankColumn = true;
-            var attributes = new AutoInitSortedDictionary<string, string>();
-            var symbolOnly = symbol.Split(':').Reverse().FirstOrDefault(); // accommodate Think or Swim group prefix
-            var pFiles = latestAttributes[symbolOnly].Keys.Intersect(preferredFiles);
-            string bestFile = latestFileNameForThisSymbol;
-            if (pFiles.Count() > 0)
-                bestFile = pFiles.FirstOrDefault();
-            attributes = latestAttributes[symbolOnly][bestFile];
-            if (debug) WriteLine($"Fetching latestAttributes for {symbolOnly} from {bestFile}");
-            foreach ((var position, (var attributeName, var numeric, var screenTip, var displayName, var convert, _,_,_)) in mapPositionToAttributeName)//foreach ((var key, var val) in latestAttributes[symbol])
+            //var symbolOnly = symbol.Split(':').Reverse().FirstOrDefault(); // remove the Think or Swim equity/stock group  prefix
+
+            AutoInitSortedDictionary<string, string> attributes = FindAttributesForSymbol(symbol, latestAttributes);
+
+            // Fix for CS7036: Ensure the correct arguments are passed to the 'colorCodeHue' Action delegate.
+
+            foreach ((var position, (var attributeName, var numeric, var screenTip, var displayName, var convert, _, _, _, var colorCodeHue)) in mapPositionToAttributeName)
             {
+                var styleName = "s68";
                 var skipToIndex = skipOverBlankColumn ? $" ss:Index=\"{columnCurrent + 2}\"" : "";
                 var type = numeric ? "Number" : "String";
                 var value = convert(attributes[attributeName]);
@@ -1207,6 +1478,22 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
                     value = patRemoveFinalM.Replace(value, m => m.Groups[1].Value);
                     value = patRemoveLeadingZeros.Replace(value, m => m.Groups[2].Value);
                 }
+                // Ensure the 'colorCodeHue' Action is invoked with the correct arguments
+                if (colorCodeHue != null && numeric && value!= "-")
+                {
+                    colorCodeHue(this, attributes, attributeName); 
+                    stockExcelSaturationAgeStyle.InputMetric = 0.6; // reset the input metric for the next color coding. This is the saturation.
+                    var RGBHexColor = stockExcelSaturationAgeStyle.ColorHexRGB;
+                    if (!generateMasterRegexList && debug1)
+                    {
+                        WriteLine($"fileName={latestFileNameForThisSymbol} symbol={symbol} attributeName={attributeName} value={value} RGBHexColor={RGBHexColor} stockExcelSaturationAgeStyle=({stockExcelSaturationAgeStyle})");
+                    }
+
+                    var style = new ExcelStyle { Color = RGBHexColor, Name = "s" + RGBHexColor };
+                    excelStyles[RGBHexColor] = style;
+                    styleName = "s" + RGBHexColor;
+                }
+
                 metricCells += $"""    <Cell{skipToIndex} ss:StyleID="{styleName}"><Data ss:Type="{type}">{value}</Data><NamedCell ss:Name="_FilterDatabase"/></Cell>""";
                 columnCurrent++;
                 skipOverBlankColumn = false;
@@ -1228,6 +1515,26 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
                 throw ex;
             }
         }
+    }
+
+    private static AutoInitSortedDictionary<string, string> FindAttributesForSymbol(string symbol, AutoMultiDimSortedDictionary<string, AutoMultiDimSortedDictionary<string, AutoInitSortedDictionary<string, string>>> latestAttributes)
+    {
+        var maxAttributeCount = 0;
+        var attributes = new AutoInitSortedDictionary<string, string>();
+        //string bestFile = String.Empty;
+        foreach (var fileName in latestAttributes[symbol].Keys)
+        {
+            var attributeCount = latestAttributes[symbol][fileName].Count;
+            if (attributeCount > maxAttributeCount)
+            {
+                maxAttributeCount = latestAttributes[symbol][fileName].Count;
+                attributes = latestAttributes[symbol][fileName]; // use the attributes from the file with the most attributes
+                                                                 //bestFile = fileName;
+            }
+            if (debug1) WriteLine($"fileName={fileName} attributeCount = {attributeCount} attributes={string.Join(",", attributes.Keys)}");
+        }
+
+        return attributes;
     }
 
     private static string PrependToScreenTip(string? symbol, string screenTip)
@@ -1256,7 +1563,7 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
         if (string.IsNullOrEmpty(dollarVolume) || dollarVolume == "-")
         {
             //WriteLine($"File name = {fileName} {symbol} missing dollar vol");
-            stockExcelSaturationAgeStyle.Hue = 290.0 / 360.0 * 255.0;
+            stockExcelSaturationAgeStyle.Hue = 290.0 / 360.0 * 255.0; // 290 is purple for "missing value" or "no value" or "N/A"
         }
         else
         {
@@ -1335,18 +1642,53 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
             stockExcelSaturationAgeStyle.Hue = upDownVol * 120.0 / 360.0 * 255.0;
         }
     }
-    void ColorCodeBy_Metric(AutoInitSortedDictionary<string, string> attributeTable, string metricName)
+    /// <summary>
+    /// Adjusts the hue and the saturation of a color based on a specified ageMetric from a dictionary, indicating data status visually.
+    /// For example, the Saturation metric could be the age of the data in days (the number of days that equity has been on a watch list), and the hue could be closing range or the price change.
+    /// Hues are in the range of 0 to 180, where 0 is red (undesirable), 62 is yellow (warning), 120 is green (good), and 180 is blue (best).
+    /// Output: stockExcelSaturationAgeStyle.Hue
+    /// </summary>
+    /// <param name="attributeTable">Provides a mapping of ageMetric names to their corresponding string values for hue calculation.</param>
+    /// <param name="metricName">Specifies the key used to retrieve the ageMetric value from the provided mapping.</param>
+    void ColorCodeHueByMetric(AutoInitSortedDictionary<string, string> attributeTable, string metricName)
     {
         var metricStr = attributeTable[metricName];
         if (string.IsNullOrEmpty(metricStr) || metricStr == "-")
         {
-            stockExcelSaturationAgeStyle.Hue = 290.0 / 360.0 * 255.0;
+            stockExcelSaturationAgeStyle.Hue = 290.0 / 360.0 * 255.0; // this is purple indicating no data or not applicable
         }
         else
         {
-            var metric = double.Parse(metricStr.Trim());
-            var min = doubleMin[metricName];
-            var max = doubleMax[metricName];
+            double metric;
+            try
+            {
+                metric = double.Parse(metricStr.Trim());
+            }
+            catch(Exception ex)
+            {
+                WriteLine($"Error parsing metric '{metricStr}' for metricName '{metricName}': {ex.Message}");
+                throw ex; // rethrow the exception to handle it upstream
+            }
+            double min;
+            try
+            {
+                min = doubleMin[metricName];
+            }
+            catch (Exception ex)
+            {
+                WriteLine($"Error accessing doubleMin for metricName '{metricName}': {ex.Message}");
+                throw ex; // rethrow the exception to handle it upstream
+            }
+            double max;
+            try
+            {
+                max = doubleMax[metricName];
+            }
+            catch (Exception ex)
+            {
+                WriteLine($"Error accessing doubleMax for metricName '{metricName}': {ex.Message}");
+                throw ex; // rethrow the exception to handle it upstream
+            }
             if (mapAttributeNametoAttributeAttributes[metricName].max != double.MinValue)
             {
                 max = Math.Min(max, mapAttributeNametoAttributeAttributes[metricName].max);
@@ -1358,7 +1700,76 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
             metric = Math.Min(metric, max);
             metric = Math.Max(metric, min);
             metric = (metric - min) / (max - min);
-            stockExcelSaturationAgeStyle.Hue = metric * 180.0 / 360.0 * 255.0;
+            var hue = metric * 180.0 / 360.0 * 255.0;  // 180 is blue, the maximum hue value for blue in the HSL color model. Usually blue is good. 0 is red which is the worst. 
+            stockExcelSaturationAgeStyle.Hue = hue;
+            // WriteLine($" upDownVol={upDownVolStr} => upDownVol={upDownVol} => stockExcelSaturationAgeStyle.Hue={stockExcelSaturationAgeStyle.Hue}");
+        }
+    }
+    void ColorCodeHueByEarningsSalesMetric(AutoInitSortedDictionary<string, string> attributeTable, string metricName)
+    {
+        var metricStr = attributeTable[metricName];
+        if (string.IsNullOrEmpty(metricStr) || metricStr == "-")
+        {
+            stockExcelSaturationAgeStyle.Hue = 290.0 / 360.0 * 255.0; // this is purple indicating no data or not applicable
+        }
+        else
+        {
+            double metric;
+            try
+            {
+                metric = double.Parse(metricStr.Trim());
+            }
+            catch (Exception ex)
+            {
+                WriteLine($"Error parsing metric '{metricStr}' for metricName '{metricName}': {ex.Message}");
+                throw ex; // rethrow the exception to handle it upstream
+            }
+            double min;
+            try
+            {
+                min = doubleMin[metricName];
+            }
+            catch (Exception ex)
+            {
+                WriteLine($"Error accessing doubleMin for metricName '{metricName}': {ex.Message}");
+                throw ex; // rethrow the exception to handle it upstream
+            }
+            if (mapAttributeNametoAttributeAttributes[metricName].min != double.MaxValue)
+            {
+                min = Math.Max(min, mapAttributeNametoAttributeAttributes[metricName].min);
+            }
+            double max;
+            try
+            {
+                max = doubleMax[metricName];
+            }
+            catch (Exception ex)
+            {
+                WriteLine($"Error accessing doubleMax for metricName '{metricName}': {ex.Message}");
+                throw ex; // rethrow the exception to handle it upstream
+            }
+            if (mapAttributeNametoAttributeAttributes[metricName].max != double.MinValue)
+            {
+                max = Math.Min(max, mapAttributeNametoAttributeAttributes[metricName].max);
+            }
+            if(metric > 0)
+            {
+                var logMetric = Math.Log10(metric);
+                if (logMetric > 2 && logMetric < 3)
+                {
+                    logMetric = 0; // don't allow negative values
+                }
+                var logMax = Math.Log10(max);
+            }
+            else
+            {
+                metric = Math.Min(metric, max);
+            }
+            metric = Math.Min(metric, max);
+            metric = Math.Max(metric, min);
+            metric = (metric - min) / (max - min);
+            var hue = metric * 180.0 / 360.0 * 255.0;  // 180 is blue, the maximum hue value for blue in the HSL color model. Usually blue is good. 0 is red which is the worst. 
+            stockExcelSaturationAgeStyle.Hue = hue;
             // WriteLine($" upDownVol={upDownVolStr} => upDownVol={upDownVol} => stockExcelSaturationAgeStyle.Hue={stockExcelSaturationAgeStyle.Hue}");
         }
     }
@@ -1391,28 +1802,71 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
             // WriteLine($" upDownVol={upDownVolStr} => upDownVol={upDownVol} => stockExcelSaturationAgeStyle.Hue={stockExcelSaturationAgeStyle.Hue}");
         }
     }
-    static SortedDictionary<string, string> MakeMapFileNameToFileNameNoExt(string[] fileNames)
+    static readonly Regex patUnitCost = new Regex(@"(UnitCost)", RegexOptions.Compiled);
+    static readonly Regex patProfitLossDollar = new Regex(@"(ProfitLossDollar)", RegexOptions.Compiled);
+    static readonly Regex patProfitLoss = new Regex(@"(ProfitLoss)", RegexOptions.Compiled);
+    static readonly (Regex regex, string replacement)[] readableColumnNames = new (Regex, string)[]
     {
-        var mapFileNameToFileNameNoExt = new SortedDictionary<string, string>(); ;
+        (patUnitCost, "Unit Cost"),
+        (patProfitLossDollar, "Profit Loss $"),
+        (patProfitLoss, "Profit Loss %"),
+        (new Regex(@"DATR21ManagedByGroupPercent"), "21 Day $ ATR Managed By Group %"),
+        (new Regex(@"DATR21ManagedByPercent", RegexOptions.Compiled), "21 Day $ ATR Managed By %"),
+        (new Regex(@"DATR21Percent", RegexOptions.Compiled), "21 Day $ ATR %"),
+        (new Regex(@"DATR21AccntGroupPercent", RegexOptions.Compiled), "21 Day $ ATR Account Group %"),
+        (new Regex(@"DATR21AccntPercent", RegexOptions.Compiled), "21 Day $ ATR Account %"),
+        (new Regex(@"DecoratedSymbol", RegexOptions.Compiled), "Decorated Symbol"),
+        (new Regex(@"Schwab SymbolName", RegexOptions.Compiled), "Schwab Symbol Name"),
+        (new Regex(@"Schwab NetLiquidValue", RegexOptions.Compiled), "Schwab Net Liquid $"),
+        (new Regex(@"Schwab NetLiqPercent", RegexOptions.Compiled), "Schwab Net Liquid %"),
+        (new Regex(@"AccntType", RegexOptions.Compiled), "Account Type"),
+        (new Regex(@"Schwab ATR21Day", RegexOptions.Compiled), "Schwab 21 Day ATR"),
+        (new Regex(@"Schwab DATR21", RegexOptions.Compiled), "Schwab 21 Day $ ATR"),
+        (new Regex(@"Schwab TotalCost", RegexOptions.Compiled), "Schwab Total Cost $"),
+        (new Regex(@"DATR21Percent", RegexOptions.Compiled), "21 Day $ ATR %"),
+    };
+
+    static SortedDictionary<string, string> MakeMapFileNameToColumnHeader(string[] fileNames)
+    {
+        var mapFileNameToFileNameNoExt = new SortedDictionary<string, string>();
         foreach (var fileName in fileNames)
-        {
-            var fileNameWithoutOptionalPrefix = patFileNameOrderPrefix.Match(fileName).Groups[3].Value;
+        {   //@@todo@@ Fix this and check for successful pattern match. Also: insert some spaces between words in the column name so excel can wrap them.
+            var fileNameWithoutOptionalPrefix = patFileNameOrderPrefix.Match(fileName).Groups[3].Value; // strip off the prefix that implements the sorted order
             var match = patFileExtension.Match(fileNameWithoutOptionalPrefix);
-            var fileNameWithOutExtension = match.Success ? match.Groups[1].Value : Path.GetFileName(fileName);
+            var fileNameWithOutExtension = match.Success ? match.Groups[1].Value : Path.GetFileName(fileNameWithoutOptionalPrefix);
+            foreach ((var regex, var replacement) in readableColumnNames)
+            {
+                // Replace the file names with more readable column names
+                if (regex.Match(fileNameWithOutExtension).Success)
+                {
+                    //if (!generateMasterRegexList) WriteLine($"Replacing {fileNameWithOutExtension} with {replacement}");
+                    fileNameWithOutExtension = regex.Replace(fileNameWithOutExtension, replacement);
+                }
+                else if (!generateMasterRegexList && fileNameWithOutExtension.Contains("Schwab"))
+                {
+                    //WriteLine($"Not replacing {fileNameWithOutExtension} with {replacement}");
+                }
+            }
+
             mapFileNameToFileNameNoExt.Add(fileName, fileNameWithOutExtension);
         }
         return mapFileNameToFileNameNoExt;
     }
-    static int GenerateXMLWorksheetColumnDeclarations(SortedDictionary<string, int> mapFileNameToColumnPosition/*, SortedDictionary<string, string> mapFileNameToFileNameNoExt*/, StringBuilder sbXMLWorksheetRows, StringBuilder sbCSV, List<string> xmlColumnWidths, string[] fileNames)
+    int GenerateXMLWorksheetColumnDeclarations(//SortedDictionary<string, int> mapSortOrderPrefixedFileNameToColumnPosition, SortedDictionary<string, string> mapFileNameToColumnHeader 
+        StringBuilder sbXMLWorksheetRows, 
+        StringBuilder sbCSV, 
+        List<string> xmlColumnWidths/*, 
+        string[] sortOrderPrefixedFileNames*/)
     {
         var columnCount = 0;
-        foreach (var fileName in fileNames)
+        foreach (var sortOrderPrefixedFileName in sortOrderPrefixedFileNames)
         {
-            mapFileNameToColumnPosition[fileName] = columnCount++;
-            var fileNameWithoutOptionalPrefix = patFileNameOrderPrefix.Match(fileName).Groups[3].Value;
+            var fileNameWithSortOrderPrefix = sortOrderPrefixedFileName;
+            mapSortOrderPrefixedFileNameToColumnPosition[fileNameWithSortOrderPrefix] = columnCount++; // populate mapSortOrderPrefixedFileNameToColumnPosition here! @@todo@@ this is superfluous, remove it.
+            var fileNameWithoutOptionalPrefix = patFileNameOrderPrefix.Match(sortOrderPrefixedFileName).Groups[3].Value;
             var match = patFileExtension.Match(fileNameWithoutOptionalPrefix);
-            var fileNameWithOutExtension = match.Success ? match.Groups[1].Value : Path.GetFileName(fileName);
-            var m = patNotes.Match(fileName);
+            var fileNameWithOutExtension = match.Success ? match.Groups[1].Value : Path.GetFileName(sortOrderPrefixedFileName);
+            var m = patNotes.Match(sortOrderPrefixedFileName);
             var comments = m.Success ? m.Groups[3].Value == "Comments" : false;
             var formulas = m.Success ? m.Groups[3].Value == "Formulas" : false;
             if (m.Success && !(comments|formulas))
@@ -1442,7 +1896,7 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
         }
     }
 
-    static void UpdateMapFileNameToSymbolToDateToAttributes(AutoMultiDimSortedDictionary<string/*file name*/, AutoMultiDimSortedDictionary<string /*symbol*/, AutoMultiDimSortedDictionary<DateTime, AutoInitSortedDictionary<string/*metric name*/, string/*metric value*/>>>> mapFileNameToSymbolToDatesToAttributes,
+    static void UpdateMapFileNameToSymbolToDateToAttributes(AutoMultiDimSortedDictionary<string/*file name*/, AutoMultiDimSortedDictionary<string /*symbol*/, AutoMultiDimSortedDictionary<DateTime, AutoInitSortedDictionary<string/*ageMetric name*/, string/*ageMetric value*/>>>> mapFileNameToSymbolToDatesToAttributes,
                                                  string fileName,
                                                  AutoMultiDimSortedDictionary<string, AutoMultiDimSortedDictionary<DateTime, AutoInitSortedDictionary<string, string>>> csvData)
     {
@@ -1464,6 +1918,13 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
     static Regex patDateTime_ddd_MMM_dd_YYYY_ddd_MMM_dd_YYYY = new Regex(@"^(Mon|Tue|Wed|Thu|Fri|Sat|Sun) ((Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) ([0-9]+),? ([0-9]+)):\s*&lt;((Mon|Tue|Wed|Thu|Fri|Sat|Sun) ((Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) ([0-9]+),? ([0-9]+)))&gt;");
     static Regex patDateTime_ddd_MMM_dd_YYYY = new Regex(@"^(Mon|Tue|Wed|Thu|Fri|Sat|Sun) ((Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) ([0-9]+),? ([0-9]+))");
 
+    /// <summary>
+    /// Extracts a DateTime value from a specified file path based on its directory structure and naming convention.
+    /// If there is no Date embedded in the path, it returns the last write date-time of the file.
+    /// </summary>
+    /// <param name="filePath">The path to the file from which the date and time information will be extracted.</param>
+    /// <returns>Returns a DateTime object representing either the parsed date from the directory name or the last write time of
+    /// the file.</returns>
     static DateTime ExtractDateTimeFromFilePath(string filePath)
     {
         var dirs = filePath.Split('\\');
@@ -1537,46 +1998,110 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
         }
         return "999";
     }
+
+    // Fix for CS0305: Correcting the generic type usage for AutoInitIntSortedDictionary
+
+    // The issue arises because the method `ColorCodeByHue` is using `AutoInitIntSortedDictionary<string, string>`,
+    // but the type `AutoInitIntSortedDictionary<K>` only accepts one type argument. 
+    // Based on the context, it seems the intended type should be `AutoInitIntSortedDictionary<string>`.
+
+    static void ColorCodeByHue3(CompareTickerSymbolListsInCSVFilesMainProgram main, CompareTickerSymbolListsInCSVFiles.AutoInitSortedDictionary<string,string> attributes, string metric)
+    {
+        main.ColorCodeHueByMetric(attributes, metric);
+    }
+
     // Add new "orderbys" here
     static Dictionary<int, AttributeAttributes> mapPositionToAttributeName = new Dictionary<int, AttributeAttributes>{
         //                            name                      numeric screenTip displayName        convert orderByConvert
-        { 0, new AttributeAttributes("seq"                     , true , false, "seq"                , e=>e, null) },
-        { 1, new AttributeAttributes("Current Price"           , true , true , "Price"              , e=>e, null) },
-        { 2, new AttributeAttributes("Price % Chg"             , true , true , "Price % Chg"        , e=>e, MapLogDoubleToInteger,5,-5)},
-        { 3, new AttributeAttributes("Comp Rating"             , true , true , "Comp Rating"        , e=>e, FormatInteger) },
-        { 4, new AttributeAttributes("EPS Rating"              , true , true , "EPS Rating"         , e=>e, null ) },
-        { 5, new AttributeAttributes("RS Rating"               , true , true , "RS Rating"          , e=>e, FormatInteger) },
-        { 6, new AttributeAttributes("A/D Rating"              , false, true , "A/D Rating"         , e=>e, null) },
-        { 7, new AttributeAttributes("SMR Rating"              , false, true , "SMR Rating"         , e=>e, null) },
-        { 8, new AttributeAttributes("50-Day Avg $ Vol (1000s)", true , true , "50-Day Avg $M Vol"  , e=>   FormatDollarVolume(e,"M"), (e,_) => FormatDollarVolume(e))},
-        { 9, new AttributeAttributes("Ind Group Rank"          , true , true , "Ind Group Rank"     , e=>e, FormatInteger) },
-        {10, new AttributeAttributes("Industry Name"           , false, true , "Industry Name"      , e=>e, null) },
-        {11, new AttributeAttributes("Sector"                  , false, false, "Sector"             , e=>e, null) },
-        {12, new AttributeAttributes("Name"                    , false, true , "Name"               , e=>e, null) },
-        {13, new AttributeAttributes("Sponsor Rating"          , false, false, "Sponsor Rating"     , e=>e, null) },
-        {14, new AttributeAttributes("Funds % Increase"        , true , false, "Funds % Increase"   , e=>e, FormatFloat, 10,0) },
-        {15, new AttributeAttributes("Number of Funds"         , true , false, "Number of Funds"    , e=>e, FormatInteger, 2000, 0) },
-        {16, new AttributeAttributes("Funds %"                 , true , false, "Funds %"            , e=>e, FormatFloat, 99, 0) },
-        {17, new AttributeAttributes("Mgmt %"                  , true , false, "Mgmt %"             , e=>e, FormatFloat, 99, 0) },
-        {18, new AttributeAttributes("% Off High"              , true , false, "% Off High"         , e=>e, FormatFloat, 3, -20) },
-        {19, new AttributeAttributes("Earnings Stability"      , true , false, "Earnings Stability" , e=>e, FormatInteger) },
-        {20, new AttributeAttributes("EPS Due Date"            , false, false, "EPS Due Date"       , e=>e, null) },
-        {21, new AttributeAttributes("Days to Earnings"        , true , false, "Days to Earnings"   , e=>e, null) },
-        {22, new AttributeAttributes("Symbol"                  , false, false, "Symbol"             , e=>e, null) },
-        {23, new AttributeAttributes("ROE"                     , true , true , "ROE"                , e=>e, FormatFloat, 100,-100) },
-        {24, new AttributeAttributes("Up/Down Vol"             , true , true , "Up/Down Vol"        , e=>e, FormatFloat, 2) },
-        {25, new AttributeAttributes("Yield"                   , true , true , "Yield"              , e=>e, FormatFloat) },
-        {26, new AttributeAttributes("ETF"                     , false, false, "ETF"                , e=>e, (e,n)=>e) },
-        {27, new AttributeAttributes("Daily Closing Range"     , true , false, "Daily Closing Range", e=>e, FormatPercentFloat, 100, 0) },
-        {28, new AttributeAttributes("Weekly Closing Range"    , true , false, "Weekly Closing Range",e=>e, FormatPercentFloat, 100, 0) },
-        {29, new AttributeAttributes("Market Cap (mil)"        , true , true , "Market Cap (mil)"    ,e=>e, MapLogDoubleToInteger, 4_000_000.4,2.0) },
-        {30, new AttributeAttributes("21 Day ATR %"            , true , false, "21 Day ATR %"        ,e=>e, (e,_)=>{ if(string.IsNullOrEmpty(e)) e= ""; else if(e!="-") e= ""+(Double.Parse(e)*10);  return FormatPercentFloat(e,_); }, 100, 0) }, // instead of displaying a decimal point which takes up room, just multiply by 10 instead
-        {31, new AttributeAttributes("30 Day ATR %"            , true , false, "30 Day ATR %"        ,e=>e, FormatPercentFloat, 100, 0) },
-        {32, new AttributeAttributes("50 Day ATR %"            , true , false, "50 Day ATR %"        ,e=>e, FormatPercentFloat, 100, 0) },
-        {33, new AttributeAttributes("Account"                 , false, false, "Account"             ,e=>e, null) },
-        {34, new AttributeAttributes("Group"                   , false, false, "Group"               ,e=>e, null) },
-        {35, new AttributeAttributes("Cost"                    , true,  false, "Cost"                ,e=>e, FormatFloat) },
-        {36, new AttributeAttributes("Total Cost"              , true,  false, "Total Cost"          ,e=>e, FormatFloat) }
+        { 0, new AttributeAttributes("ROE"                             , true , true , "ROE"                             , e=>e                      , FormatFloat, 100,-100) },
+        { 1, new AttributeAttributes("ROE 5-Yr Avg"                    , true , false, "ROE 5-Yr Avg"                    , e=>e                      , FormatFloat, 100,-100) },
+        { 2, new AttributeAttributes("21 Day ATR %"                    , true , false, "21 Day ATR %"                    , e=>e                      , (e,_)=>{ if(string.IsNullOrEmpty(e)) e= ""; else if(e!="-") e= ""+(Double.Parse(e)*10);  return FormatPercentFloat(e,_); }, 100, 0) }, // instead of displaying a decimal point which takes up room, just multiply by 10 instead
+        { 3, new AttributeAttributes("Earnings Stability"              , true , false, "Earnings Stability"              , e=>e                      , FormatInteger, 99,0) },
+        { 4, new AttributeAttributes("Sustainable Growth %"            , true , false, "Sustainable Growth %"            , e=>e                      , FormatFloat, 650, 0, ColorCodeByHue3) },
+        { 5, new AttributeAttributes("EPS % Chg Lst Yr"                , true , false, "EPS % Chg Lst Yr"                , e=>e                      , FormatFloat, 100, 0, ColorCodeByHue3) },
+        { 6, new AttributeAttributes("EPS % Chg 1 Yr Ago"              , true , false, "EPS % Chg 1 Yr Ago"              , e=>e                      , FormatFloat, 5000,0, ColorCodeByHue3) },
+        { 7, new AttributeAttributes("EPS % Growth 1 Yr"               , true , false, "EPS % Growth 1 Yr"               , e=>e                      , FormatFloat, 5000,0, ColorCodeByHue3) },
+        { 8, new AttributeAttributes("EPS % Growth 3 Yr"               , true , false, "EPS % Growth 3 Yr"               , e=>e                      , FormatFloat, 5000,0, ColorCodeByHue3) },
+        { 9, new AttributeAttributes("EPS % Growth 5 Yr"               , true , false, "EPS % Growth 5 Yr"               , e=>e                      , FormatFloat, 5000,0, ColorCodeByHue3) },
+        {10, new AttributeAttributes("3-Yr EPS Growth Geq 5-Yr"        , false, false, "3-Yr EPS Growth Geq 5-Yr"        , e=>e                      , null) },
+        {11, new AttributeAttributes("EPS % Growth 5 Yr Pct Rnk"       , true , false, "EPS % Growth 5 Yr Pct Rnk"       , e=>e                      , FormatFloat, 99,0, ColorCodeByHue3) },
+        {12, new AttributeAttributes("EPS Accel 3 Qtrs"                , false, false, "EPS Accel 3 Qtrs"                , e=>e                      , null) },
+        {13, new AttributeAttributes("EPS % Chg Last Qtr"              , true , false, "EPS % Chg Last Qtr"              , e=>e                      , FormatFloat, 1000, 0, ColorCodeByHue3) },
+        {14, new AttributeAttributes("EPS % Chg 1 Q Ago"               , true , false, "EPS % Chg 1 Q Ago"               , e=>e                      , FormatFloat, 999,0, ColorCodeByHue3) },
+        {15, new AttributeAttributes("EPS % Chg 2 Q Ago"               , true , false, "EPS % Chg 2 Q Ago"               , e=>e                      , FormatFloat, 999,0, ColorCodeByHue3) },
+        {16, new AttributeAttributes("EPS % Chg 3 Q Ago"               , true , false, "EPS % Chg 3 Q Ago"               , e=>e                      , FormatFloat, 999,0, ColorCodeByHue3) },
+        {17, new AttributeAttributes("Avg EPS % Chg 2Q"                , true , false, "Avg EPS % Chg 2Q"                , e=>e                      , FormatFloat, 999,0, ColorCodeByHue3) },
+        {18, new AttributeAttributes("Avg EPS % Chg 3Q"                , true , false, "Avg EPS % Chg 3Q"                , e=>e                      , FormatFloat, 999,0, ColorCodeByHue3) },
+        {19, new AttributeAttributes("Avg EPS % Chg 4Q"                , true , false, "Avg EPS % Chg 4Q"                , e=>e                      , FormatFloat, 999,0, ColorCodeByHue3) },
+        {20, new AttributeAttributes("Avg EPS % Chg 5Q"                , true , false, "Avg EPS % Chg 5Q"                , e=>e                      , FormatFloat, 999,0, ColorCodeByHue3) },
+        {21, new AttributeAttributes("Avg EPS % Chg 6Q"                , true , false, "Avg EPS % Chg 6Q"                , e=>e                      , FormatFloat, 999,0, ColorCodeByHue3) },
+        {22, new AttributeAttributes("EPS % Chg Lst Q Gtr 3-Yr Growth" , false, false, "EPS % Chg Lst Q Gtr 3-Yr Growth" , e=>e                      , null) },
+        {23, new AttributeAttributes("EPS Trailing 4 Qtrs"             , true , false, "EPS Trailing 4 Qtrs"             , e=>e                      , FormatFloat, 999,0, ColorCodeByHue3) },
+        {24, new AttributeAttributes("EPS Trl 4Q Geq EPS Lst Fiscal Yr", false, false, "EPS Trl 4Q Geq EPS Lst Fiscal Yr", e=>e                      , null) },
+        {25, new AttributeAttributes("EPS Lst Yr Gtr EPS 4 Yrs Ago"    , false, false, "EPS Lst Yr Gtr EPS 4 Yrs Ago"    , e=>e                      , null) },
+        {26, new AttributeAttributes("EPS Est Cur Qtr %"               , true , false, "EPS Est Cur Qtr %"               , e=>e                      , FormatFloat, 999,0, ColorCodeByHue3) },
+        {27, new AttributeAttributes("EPS Est Cur Yr %"                , true , false, "EPS Est Cur Yr %"                , e=>e                      , FormatFloat, 999,0, ColorCodeByHue3) },
+        {28, new AttributeAttributes("EPS Est Next Yr %"               , true , false, "EPS Est Next Yr %"               , e=>e                      , FormatFloat, 999,0, ColorCodeByHue3) },
+        {29, new AttributeAttributes("EPS % Chg Last Qtr (-/+)"        , true , false, "EPS % Chg Last Qtr (-/+)"        , e=>e                      , FormatFloat, 999,0, ColorCodeByHue3) },
+        {30, new AttributeAttributes("EPS % Chg 1 Q Ago (-/+)"         , true , false, "EPS % Chg 1 Q Ago (-/+)"         , e=>e                      , FormatFloat, 999,0, ColorCodeByHue3) },
+        {31, new AttributeAttributes("EPS % Chg 2 Q Ago (-/+)"         , true , false, "EPS % Chg 2 Q Ago (-/+)"         , e=>e                      , FormatFloat, 999,0, ColorCodeByHue3) },
+        {32, new AttributeAttributes("EPS % Chg 3 Q Ago (-/+)"         , true , false, "EPS % Chg 3 Q Ago (-/+)"         , e=>e                      , FormatFloat, 999,0, ColorCodeByHue3) },
+        {33, new AttributeAttributes("EPS Surprise"                    , true , false, "EPS Surprise"                    , e=>e                      , FormatFloat, 999,0, ColorCodeByHue3) },
+        {34, new AttributeAttributes("Fiscal EPS Lst Yr"               , true , false, "Fiscal EPS Lst Yr"               , e=>e                      , FormatFloat, 999,0, ColorCodeByHue3) },
+        {35, new AttributeAttributes("Fiscal EPS 1 Yr Ago"             , true , false, "Fiscal EPS 1 Yr Ago"             , e=>e                      , FormatFloat, 999,0, ColorCodeByHue3) },
+        {36, new AttributeAttributes("Fiscal EPS 2 Yrs Ago"            , true , false, "Fiscal EPS 2 Yrs Ago"            , e=>e                      , FormatFloat, 999,0, ColorCodeByHue3) },
+        {37, new AttributeAttributes("Fiscal EPS 3 Yrs Ago"            , true , false, "Fiscal EPS 3 Yrs Ago"            , e=>e                      , FormatFloat, 999,0, ColorCodeByHue3) },
+        {38, new AttributeAttributes("Fiscal EPS 4 Yrs Ago"            , true , false, "Fiscal EPS 4 Yrs Ago"            , e=>e                      , FormatFloat, 999,0, ColorCodeByHue3) },
+        {39, new AttributeAttributes("Fiscal EPS 6 Yrs Ago"            , true , false, "Fiscal EPS 6 Yrs Ago"            , e=>e                      , FormatFloat, 999,0, ColorCodeByHue3) },
+        {40, new AttributeAttributes("Fiscal EPS 5 Yrs Ago"            , true , false, "Fiscal EPS 5 Yrs Ago"            , e=>e                      , FormatFloat, 999,0, ColorCodeByHue3) },
+        {41, new AttributeAttributes("Symbol"                          , false, false, "Symbol"                          , e=>e                      , null) },
+        {42, new AttributeAttributes("Sales % Chg Lst Qtr"             , true , false, "Sales % Chg Lst Qtr"             , e=>e                      , FormatFloat, 999,0, (main,attributes,metric)=>{ main.ColorCodeHueByMetric(attributes,metric); }) },
+        {43, new AttributeAttributes("Avg Sales % Chg 2Q"              , true , false, "Avg Sales % Chg 2Q"              , e=>e                      , FormatFloat, 999,0, ColorCodeByHue3) },
+        {44, new AttributeAttributes("Avg Sales % Chg 3Q"              , true , false, "Avg Sales % Chg 3Q"              , e=>e                      , FormatFloat, 999,0, ColorCodeByHue3) },
+        {45, new AttributeAttributes("Avg Sales % Chg 4Q"              , true , false, "Avg Sales % Chg 4Q"              , e=>e                      , FormatFloat, 999,0, ColorCodeByHue3) },
+        {46, new AttributeAttributes("Avg Sales % Chg 5Q"              , true , false, "Avg Sales % Chg 5Q"              , e=>e                      , FormatFloat, 999,0, ColorCodeByHue3) },
+        {47, new AttributeAttributes("Avg Sales % Chg 6Q"              , true , false, "Avg Sales % Chg 6Q"              , e=>e                      , FormatFloat, 999,0, ColorCodeByHue3) },
+        {48, new AttributeAttributes("Sales Accel 2 Qtrs"              , false, false, "Sales Accel 2 Qtrs"              , e=>e                      , null) },
+        {49, new AttributeAttributes("Sales Accel 3 Qtrs"              , false, false, "Sales Accel 3 Qtrs"              , e=>e                      , null) },
+        {50, new AttributeAttributes("Sales % Chg Lst Yr"              , true , false, "Sales % Chg Lst Yr"              , e=>e                      , FormatFloat, 999,0, ColorCodeByHue3) },
+        {51, new AttributeAttributes("Sales Growth 3 Yr"               , true , false, "Sales Growth 3 Yr"               , e=>e                      , FormatFloat, 999,0, ColorCodeByHue3) },
+        {52, new AttributeAttributes("Sales Growth 5 Yr"               , true , false, "Sales Growth 5 Yr"               , e=>e                      , FormatFloat, 999,0, ColorCodeByHue3) },
+        {53, new AttributeAttributes("Symbol-2"                        , false, false, "Symbol"                          , e=>e                      , null) },
+        {54, new AttributeAttributes("Annual Sales (mil)"              , true , false, "Annual Sales (mil)"              , e=>e                      , FormatFloat, 999,0) },
+        {55, new AttributeAttributes("seq"                             , true , false, "seq"                             , e=>e                      , null) },
+        {56, new AttributeAttributes("Current Price"                   , true , true , "Price"                           , e=>e                      , null) },
+        {57, new AttributeAttributes("Price % Chg"                     , true , true , "Price % Chg"                     , e=>e                      , MapLogDoubleToInteger,5,-5)},
+        {58, new AttributeAttributes("Comp Rating"                     , true , true , "Comp Rating"                     , e=>e                      , FormatInteger) },
+        {59, new AttributeAttributes("EPS Rating"                      , true , true , "EPS Rating"                      , e=>e                      , null ) },
+        {60, new AttributeAttributes("RS Rating"                       , true , true , "RS Rating"                       , e=>e                      , FormatInteger) },
+        {61, new AttributeAttributes("A/D Rating"                      , false, true , "A/D Rating"                      , e=>e                      , null) },
+        {62, new AttributeAttributes("SMR Rating"                      , false, true , "SMR Rating"                      , e=>e                      , null) },
+        {63, new AttributeAttributes("50-Day Avg $ Vol (1000s)"        , true , true , "50-Day Avg $M Vol"               , e=>FormatDollarVolume(e,"M"), (e,_) => FormatDollarVolume(e))},
+        {64, new AttributeAttributes("Ind Group Rank"                  , true , true , "Ind Group Rank"                  , e=>e                      , FormatInteger) },
+        {65, new AttributeAttributes("Industry Name"                   , false, true , "Industry Name"                   , e=>e                      , null) },
+        {66, new AttributeAttributes("Sector"                          , false, false, "Sector"                          , e=>e                      , null) },
+        {67, new AttributeAttributes("Name"                            , false, true , "Name"                            , e=>e                      , null) },
+        {68, new AttributeAttributes("Sponsor Rating"                  , false, false, "Sponsor Rating"                  , e=>e                      , null) },
+        {69, new AttributeAttributes("Funds % Increase"                , true , false, "Funds % Increase"                , e=>e                      , FormatFloat, 10,0) },
+        {70, new AttributeAttributes("Number of Funds"                 , true , false, "Number of Funds"                 , e=>e                      , FormatInteger, 2000, 0) },
+        {71, new AttributeAttributes("Funds %"                         , true , false, "Funds %"                         , e=>e                      , FormatFloat, 99, 0) },
+        {72, new AttributeAttributes("Mgmt %"                          , true , false, "Mgmt %"                          , e=>e                      , FormatFloat, 99, 0) },
+        {73, new AttributeAttributes("% Off High"                      , true , false, "% Off High"                      , e=>e                      , FormatFloat, 3, -20) },
+        {74, new AttributeAttributes("EPS Due Date"                    , false, false, "EPS Due Date"                    , e=>e                      , null) },
+        {75, new AttributeAttributes("Days to Earnings"                , true , false, "Days to Earnings"                , e=>e                      , null) },
+        {76, new AttributeAttributes("Up/Down Vol"                     , true , true , "Up/Down Vol"                     , e=>e                      , FormatFloat, 2) },
+        {77, new AttributeAttributes("Yield"                           , true , true , "Yield"                           , e=>e                      , FormatFloat) },
+        {78, new AttributeAttributes("ETF"                             , false, false, "ETF"                             , e=>e                      , (e,n)=>e) },
+        {79, new AttributeAttributes("Daily Closing Range"             , true , false, "Daily Closing Range"             , e=>e                      , FormatPercentFloat, 100, 0) },
+        {80, new AttributeAttributes("Weekly Closing Range"            , true , false, "Weekly Closing Range"            , e=>e                      , FormatPercentFloat, 100, 0) },
+        {81, new AttributeAttributes("Market Cap (mil)"                , true , true , "Market Cap (mil)"                , e=>e                      , MapLogDoubleToInteger, 4_000_000.4,2.0) },
+        {82, new AttributeAttributes("30 Day ATR %"                    , true , false, "30 Day ATR %"                    , e=>e                      , FormatPercentFloat, 100, 0) },
+        {83, new AttributeAttributes("50 Day ATR %"                    , true , false, "50 Day ATR %"                    , e=>e                      , FormatPercentFloat, 100, 0) },
+        {84, new AttributeAttributes("Symbol-3"                        , false, false, "Symbol"                          , e=>e                      , null) },
+        {85, new AttributeAttributes("Account"                         , false, false, "Account"                         , e=>e                      , null) },
+        {86, new AttributeAttributes("Group"                           , false, false, "Group"                           , e=>e                      , null) },
+        {87, new AttributeAttributes("Cost"                            , true , false, "Cost"                            , e=>e                      , FormatFloat) },
+        {88, new AttributeAttributes("Total Cost"                      , true , false, "Total Cost"                      , e=>e                      , FormatFloat) }
 
     };
     static string FormatDollarVolume(string e, string M ="")
@@ -1633,49 +2158,82 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
     static Regex patTag = new Regex(@"<B>\s*<Font[^>]*>\s*![A-Z][A-Z0-9\.=]*!\s*</Font>\s*</B>");
     static (Regex regex, string replacement)[] patHighLightKeyWord = {
         (new Regex("NEUTRAL"), """<B><Font html:Size="14" html:Color="#FFC000">NEUTRAL</Font></B>"""),
-        (new Regex("(?<!STRONG\\s*)SELL"),    """<B><Font html:Size="14" html:Color="#FF0000">SELL</Font></B>"""),
+        //(new Regex("(?<!STRONG\\s*)SELL"),    """<B><Font html:Size="14" html:Color="#FF0000">SELL</Font></B>"""),
         (new Regex("Reiterate Buy",RegexOptions.IgnoreCase), """<B><Font html:Color="#008080">Reiterate Buy</Font></B>"""),
         //(new Regex("(?<!STRONG\\s*)BUY"),"""<B><Font html:Size="14" html:Color="#008080">BUY</Font></B>"""),
         (new Regex("LOW"),"""<B><Font html:Size="14" html:Color="#008080">LOW</Font></B>"""),
         (new Regex("HIGH"),"""<B><Font html:Size="14" html:Color="#FF0000">HIGH</Font></B>"""),
-        (new Regex("(!AVOID!|!SHORT!)"),"""<B><Font html:Size="14" html:Color="#FF0000">$1</Font></B>"""), 
-        (new Regex("(!HOLD!|!SELL!|!BUY!|!WED!|!BSW!|!SL!|!WFV!|!GSW!)"),"""<B><Font html:Size="14" html:Color="#1873BD">$1</Font></B>"""), // !WED! == Watch Every Day! SL! == Short List BSW! == Best Stocks to Watch! WFV=Mike Webster's Favorite
+        (new Regex("(!AVOID!|!SHORT!|!SELLSIG!)"),"""<B><Font html:Size="14" html:Color="#FF0000">$1</Font></B>"""), 
+        (new Regex("(!HOLD!|!SELL!|!WED!|!BSW!|!SL!|!WFV!|!GSW!|!HBZ!|!HTF!|!DDTL!|!W4BASE!|!TOPPING!)"),"""<B><Font html:Size="14" html:Color="#1873BD">$1</Font></B>"""), // !WED! == Watch Every Day! SL! == Short List BSW! == Best Stocks to Watch! WFV=Mike Webster's Favorite
+        (new Regex("(!BUY!|!ACTIONABLE!|!BREAKINGOUT!)"),"""<B><Font html:Size="14" html:Color="#19BD19">$1</Font></B>"""), // !WED! == Watch Every Day! SL! == Short List BSW! == Best Stocks to Watch! WFV=Mike Webster's Favorite
+        (new Regex("(!3DE!|!3DS!)"),"""<B><Font html:Size="14" html:Color="#FF5500">$1</Font></B>"""), 
         (new Regex("(!BP([=0-9\\.]+)?!)"),"""<B><Font html:Size="14" html:Color="#3EB534">$1</Font></B>"""), // Green !BP! == at buy point      
         (new Regex("(!W4PB!|!BOW!)"),"""<B><Font html:Size="14" html:Color="#00CCFF">$1</Font></B>"""), // W4PB=Wait for pull back BOW=Break out watch
         (new Regex("STRONG\\s*BUY"),"""<B><I><Font html:Size="15" html:Color="#008080">STRONG BUY</Font></I></B>"""),
         (new Regex("STRONG\\s*SELL"),"""<B><I><Font html:Size="15" html:Color="#FF0000">STRONG SELL</Font></I></B>"""),
         (new Regex("MODERATE"),"""<B><Font html:Size="14" html:Color="#00CCFF">MODERATE</Font></B>"""),
         (new Regex("MEDIUM"),"""<B><Font html:Size="14" html:Color="#00CCFF">MEDIUM</Font></B>"""),
-        (new Regex("HOLD"),"""<B><Font html:Size="14" html:Color="#00CCFF">HOLD</Font></B>"""),     
+        //(new Regex("HOLD"),"""<B><Font html:Size="14" html:Color="#00CCFF">HOLD</Font></B>"""),     
         (new Regex(@"\b(PO)\b:?"),"""<B><Font html:Size="14" html:Color="#00CCFF">PT:</Font></B>"""),
         (new Regex(@"(FMV|Fair Value Estimate|PRICE TARGET|TARGET PRICE)(:)?",RegexOptions.IgnoreCase),"""<B><Font html:Size="14" html:Color="#00CCFF">PT$2</Font></B>"""),
         (new Regex(@"(Target Price:?|Price Target( Raised to)?:?|PRICE TARGET:|(Raising )?Fair Value Estimate( to)?:?|) (\$[0-9\.]+)"),"""<B><Font html:Size="14" html:Color="#00CCFF">$0</Font></B>""")
     };
-    static Dictionary<string,string> flags = new Dictionary<string, string> {
+    static SortedDictionary<string,string> flags = new SortedDictionary<string, string> {
         {"!WED!", "Watch Every Day"},
         {"!BSW!", "Best Stocks to Watch"},
         {"!SL!", "Short List"},
+        {"!3DE!", "Triple digit earnings or earnings estimates" },
+        {"!3DS!", "Triple digit sales" },
         {"!WFV!", "Mike Webster's Favorite"},
         {"!BP!", "At Buy Point"},
         {"!BOW!", "Break Out Watch"},
-        {"!AVOID!", "Avoid buying"},
+        {"!AVOID!", "Avoid buying or owning"},
+        {"!DDTL!", "Draw down trend line" },
+        {"!BREAKINGOUT!", "breaking out now" },
         {"!SHORT!", "Short"},
         {"!BUY!", "buy" },
+        {"!HBZ!", "Holding in buy zone" },
+        {"!HTF!", "High Tight Flag" },
         {"!SELL!", "sell" },
+        {"!SELLSIG!", "sell signal" },
+        {"!ACTIONABLE!", "actionable" },
+        {"!MODERATE!", "moderate" },
+        {"!TOPPING!", "Topping?" },
+        {"!MEDIUM!", "medium" },
+        {"!STRONGBUY!", "strong buy" },
+        {"!STRONGSELL!", "strong sell" },
         {"!HOLD!", "hold" },
         {"!W4PB!", "Wait for Pull Back"},
+        {"!WF4B", "Wait for base to build" },
         {"!GSW!","IBD50 Growth Stocks to Watch" }
     };
+
+    static int allowOldDataFilesHoursOld = ComputeAllowedOldDataFilesHours();//-13;  // use old csv data files up to 13 hours after midnight before coding resulting excel spreadsheet cell as purple to indicate old or missing data
+
+    static int ComputeAllowedOldDataFilesHours()
+    {
+        int result = 13; // default to 13 hours old because market closes at 13 hours after midnight. Allow use to use the default data file until 1pm the next day.
+        // if today is Saturday subtract 24 hours
+        if (DateTime.Now.DayOfWeek == DayOfWeek.Saturday)
+        {
+            result = 24;
+        }else if(DateTime.Now.DayOfWeek == DayOfWeek.Sunday)
+            {
+            // if today is Sunday subtract 48 hours
+            result = 48;
+        }
+        return result;
+    }
     static Regex patNoteHeaderBody = new Regex(@"^(\d{2}\s+(Sun|Mon|Tue|Wed|Thu|Fri|Sat)\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d+,?\s+\d{2}\s*<B>[A-Z]+</B>:)(\s*(\s*![A-Z]+!\s*))*(.*)$");
     static Regex patTags = new Regex(@"(\s*(![A-Z]+!))+");
-    AutoMultiDimSortedDictionary<string/*symbol*/, AutoMultiDimSortedDictionary<DateTime, AutoInitSortedDictionary<string/*metric name*/, string/*metric value*/>>> ParseCSV(
+    AutoMultiDimSortedDictionary<string/*symbol*/, AutoMultiDimSortedDictionary<DateTime, AutoInitSortedDictionary<string/*ageMetric name*/, string/*ageMetric value*/>>> ParseCSV(
         string fileName,
-        DateTime listDateTime,
-        AutoMultiDimSortedDictionary<string/*symbol*/, AutoMultiDimSortedDictionary<DateTime, AutoInitSortedDictionary<string/*metric name*/, string/*metric value*/>>>? defaultValues,
+        DateTime currentDataFileDateTime,
+        AutoMultiDimSortedDictionary<string/*symbol*/, AutoMultiDimSortedDictionary<DateTime, AutoInitSortedDictionary<string/*ageMetric name*/, string/*ageMetric value*/>>>? defaultValues,
         int maxEventAge)
     {
         var useCfg = true;
-        AutoMultiDimSortedDictionary<string/*symbol*/, AutoMultiDimSortedDictionary<DateTime, AutoInitSortedDictionary<string/*metric name*/, string/*metric value*/>>> rows = new();
+        AutoMultiDimSortedDictionary<string/*symbol*/, AutoMultiDimSortedDictionary<DateTime, AutoInitSortedDictionary<string/*ageMetric name*/, string/*ageMetric value*/>>> rows = new();
         var configuration = new CsvHelper.Configuration.CsvConfiguration(new CultureInfo("en-US", false))
         {
             MissingFieldFound = null,
@@ -1683,6 +2241,7 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
         };
         //WriteLine($"ParseCSV: open {fileName}");
         //System.Diagnostics.Debugger.Break();
+        // if(!generateMasterRegexList) WriteLine($"ParseCSV: open {fileName}");
         using (StreamReader reader = new StreamReader(fileName))
         //using (var csv = new CsvHelper.CsvReader(reader,  new CsvHelper.Configuration.CsvConfiguration {  Delimiter = ",",  HasHeaderRecord = true })) {
         //using (CsvReader csv = new CsvReader(reader, CultureInfo.InvariantCulture))
@@ -1696,9 +2255,11 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
             var isSymbolFileName = patSymbolName.Match(fileName);
             var isUnrealizedGainName = patUnrealizedGains.Match(fileName);
             var isSchwabGroupFileName = patGroup.Match(fileName);
+            var isSchwabATR21DayFileName = patAtr21Day.Match(fileName);
+            var isSchwabNetLiqPercentFileName = patNetLiqPercent.Match(fileName);
             var isAccountFileName = patAccount.Match(fileName);
             var isDecoratedSymbolFileName = patDecoratedSymbol.Match(fileName);
-            //isAccountFileName = new Regex(@$"({orderPrefix})\s*([a-zA-Z0-9]*)\s*Account(\.csv)?$").Match(fileName);
+            //isAccountFileName = new Regex(@$"({patSortOrderPrefix})\s*([a-zA-Z0-9]*)\s*Account(\.csv)?$").Match(fileName);
             var result = new AutoInitSortedDictionary<string, string>();
             var count = 0;
             while (csv.Read())
@@ -1721,8 +2282,21 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
                     }
                     else if (isAccountFileName.Success)
                     {
-                        var accountName = csv.GetField<string>("Account").ToUpper();
+                        var columnName = isAccountFileName.Groups[3].Value;
+                        var accountName = csv.GetField<string>(columnName).ToUpper();
                         result.Add("Account", accountName);
+                    }
+                    else if (isSchwabATR21DayFileName.Success)
+                    {
+                        var columnName = isSchwabATR21DayFileName.Groups[3].Value;
+                        var atr21day = csv.GetField<string>(columnName);
+                        result.Add(columnName, atr21day);
+                    }
+                    else if (isSchwabNetLiqPercentFileName.Success)
+                    {
+                        var columnName = isSchwabNetLiqPercentFileName.Groups[3].Value;
+                        var netLiqPercent = csv.GetField<string>(columnName);
+                        result.Add(columnName, netLiqPercent);
                     }
                     else if (isSymbolFileName.Success)
                     {
@@ -1731,11 +2305,67 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
                     }
                     else if (isDecoratedSymbolFileName.Success)
                     {
+                        // @@todo@@ The resulting spreadsheet cells show up as purple when this file ("sss Schwab
+                        // DecoratedSymbol.csv") has been updated (on the weekend, for example) by
+                        // "ExtractTOSStockGroups.py" (which is called by the bash shell script to use this and
+                        // other programs to create the excel spreadsheet) and the table "defaultData" has not
+                        // been updated on account of the master data files (MinDollarVol10MComp50.csv &
+                        // MinDollarVol10MComp50ETF.csv) have not been updated with a fresh download from Market
+                        // Surge. You typically don't want to update these on the weekend without updating all the
+                        // data files.
+
+                        // The solution is start with the date of this file and count backwards, day by day until
+                        // we find an entry in "defaultValues" and make a new entry in "defaultData" and copy the
+                        // latest data to this new entry.
+
+                        // This ("sss Schwab DecoratedSymbol.csv") is a file that contains the decorated symbol
+                        // name, which is an equity symbol prefixed with (typically) a zero filled integer that
+                        // implements the sort order.
+
+                        // @@todo@@: We are assuming that the master data files (in the map defaultValues which is
+                        // loaded from the files MinDollarVol10MComp50.csv & MinDollarVol10MComp50ETF.csv) were
+                        // updated the last time the market was open! This might not be true! If this is Sunday
+                        // they may have been updated on Saturday or if Friday was a market holiday, they could be
+                        // as old Thursday.
+
+                        DateTime ldt = AdjustDateForMarketHolidays(currentDataFileDateTime);
+
+                        // @@todo@@ accommodate other market holidays.
+                        if (defaultValues is not null)
+                        {
+                            if (defaultValues.ContainsKey(symbolOnly))
+                            {
+                                if (defaultValues[symbolOnly].ContainsKey(ldt.Date))
+                                {
+                                    // copy the most recent data in the defaultValues table to a new entry in defaultValues table that matches the current
+                                    // file's date so we can find it later.
+                                    foreach (var (key, val) in defaultValues[symbolOnly][ldt.Date])
+                                    {
+                                        if (!result.ContainsKey(key))
+                                        {
+                                            result.Add(key, val);
+                                            SaveMinMaxDoubleValues(key, val, symbolOnly);
+                                        }
+                                    }
+                                }
+                                else if (!generateMasterRegexList)
+                                {
+                                    WriteLine($"Error: DecoratedSymbol file \"{fileName}\" has no data for {symbolOnly}");
+                                }
+                            }
+                            else if (!generateMasterRegexList)
+                            {
+                                WriteLine($"Error: table DefaultValues has no data for {symbolOnly} ");
+                            }
+                        }
+                        else if (!generateMasterRegexList)
+                        {
+                            // This is normal when generating the defaultValues
+                            //WriteLine($"Error: table DefaultValues is null for {symbolOnly} ");
+                        }
                         var decoratedSymbolName = csv.GetField<string>("DecoratedSymbol");
                         result.Add("DecoratedSymbol", decoratedSymbolName);
                     }
-
-
                     if (isUnrealizedGainName.Success)
                     {
                         name = isUnrealizedGainName.Groups[3].Value;
@@ -1763,12 +2393,7 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
                         note = convertPunctuationsToXML(note, patRestoreNewLines, "&#10;");
                         if (!fileName.Contains("TRADE"))
                             foreach ((var pat, var replace) in patHighLightKeyWord)
-                            {
-                                if (pat.Match(note).Success)
-                                {
-                                    note = pat.Replace(note, replace);
-                                }
-                            }
+                                /*if (pat.Match(note).Success)*/ note = pat.Replace(note, replace);
                         if (noteDaysOld > 99) noteDaysOld = 99;
                         if (!string.IsNullOrWhiteSpace(note))
                         {
@@ -1837,7 +2462,8 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
                         //WriteLine($"---------- Begin {Symbol} in {fileName}-------------------");
                         var eventDate = csv.GetField<string>("Event Date");
                         var isNullEventDate = string.IsNullOrEmpty(eventDate);
-                        if (isNullEventDate || ValidEventDate(listDateTime, eventDate, maxEventAge)) // Events for today only, skip old events
+                        // Some stock files, like "RS Line Blue Dot" have event data and we are only interested in the more recent events.
+                        if (isNullEventDate || ValidEventDate(currentDataFileDateTime, eventDate, maxEventAge)) // Events for today only, skip old events
                         {
                             if (defaultValues != null)
                             {                                
@@ -1846,17 +2472,61 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
                                     if (defaultValues[symbolOnly] != null)
                                     {
                                         var defaultValuesForSymbol = defaultValues[symbolOnly];
-                                        // If the market is open and has not closed yet (it is before 1pm PST), use default values from the previous day if they are not available for the current day.
-                                        var weHaveDefaultDataForToday = defaultValuesForSymbol.ContainsKey(listDateTime.Date);
-                                        var weHaveDefaultDataForYesterday = defaultValuesForSymbol.ContainsKey(listDateTime.AddHours(-13).Date);
-                                        var ldt = listDateTime;
-                                        if(!weHaveDefaultDataForToday && weHaveDefaultDataForYesterday )
-                                            ldt = listDateTime.AddHours(-13);
-                                        var weHaveDefaultData = weHaveDefaultDataForToday || weHaveDefaultDataForYesterday;
-                                        if (weHaveDefaultData/*weHaveDefaultDataForToday*/)
-                                        {                                        
+
+                                        // If the market is open and has not closed yet (it is before 1pm PST), use default values from the
+                                        // previous day if they are not available for the current day.
+
+                                        // @@todo@@ If this is a weekend day or a market holiday, count backwards day by day until we have a
+                                        // non-market holiday and copy that data for the non-market holiday to a newly created entry in
+                                        // defaultData that matches the date for this data file.
+
+                                        // assume the most recent data in the defaultValues table matches the date of the file.
+                                        var defaultDataDateTime = defaultValuesForSymbol.Keys.Max();// @@todo@@ use the date time of the master list files instead.
+                                        var ldt = currentDataFileDateTime; // simplify logic and perform deep copy and save the original value just in case we need it some day.
+                                        var weHaveDefaultDataForToday = defaultValuesForSymbol.ContainsKey(ldt.Date);
+                                        var weHaveDefaultData = weHaveDefaultDataForToday;
+                                        var weHaveDefaultDataForYesterday = defaultValuesForSymbol.ContainsKey(currentDataFileDateTime.AddHours(-allowOldDataFilesHoursOld).Date);
+                                        if(weHaveDefaultDataForToday)
+                                        {
+                                            // we have data for today, use it.
+                                            ldt = currentDataFileDateTime;
+                                            weHaveDefaultData = true;
+                                            if (debug1 && !generateMasterRegexList)
+                                                WriteLine($"We have default data for {symbol} in {fileName} in the master list");
+                                        }
+                                        else if (weHaveDefaultDataForYesterday)
+                                        {
+                                            ldt = currentDataFileDateTime.AddHours(-allowOldDataFilesHoursOld);
+                                            if(debug1 && !generateMasterRegexList)
+                                                WriteLine($"We have default data for yesterday: defaultValuesForSymbol.ContainsKey(ldt.Date)={defaultValuesForSymbol.ContainsKey(ldt.Date)};");
+                                            weHaveDefaultData = true;
+
+                                        }
+                                        else if (currentDataFileDateTime.Date <= defaultDataDateTime.Date)
+                                        {
+                                            // we are processing a data file that is older than the most recent data in the defaultValues table
+                                            // this is OK: we will just use the more recent data
+                                            ldt = defaultDataDateTime;
+                                            if (debug1 && !generateMasterRegexList)
+                                                WriteLine($"Using most recent default data for {symbolOnly} in {fileName} for {currentDataFileDateTime.Date:yyyy-MM-dd} because we are processing an old data file for date {currentDataFileDateTime:yyyy-MM-dd}");
+                                            weHaveDefaultData = true;
+                                        }
+                                        else
+                                        {
+                                            // We are processing a data file that is newer than the most recent data in the defaultValues table
+                                            // this is NOT OK: we will need to copy the most recent data to a new entry in the defaultValues table
+                                            // with the date of the current data file so we can find it later.
+                                            ldt = defaultDataDateTime;
+                                            if (debug1 && !generateMasterRegexList)
+                                                WriteLine($"Info: Is today a market holiday? default data for {symbolOnly} for {currentDataFileDateTime:yyyy-MM-dd} in {fileName} is more recent than {defaultDataDateTime.Date:yyyy-MM-dd} for default data (master list) so don't copy");
+                                            weHaveDefaultData = false; // @@todo@@: this is not working, why not?
+                                            weHaveDefaultData = true;
+                                        }
+                                        if (weHaveDefaultData)
+                                        {
                                             if (defaultValues[symbolOnly][ldt.Date] != null)
                                             {
+                                                // copy the current data from the default values
                                                 foreach (var (key, val) in defaultValues[symbolOnly][ldt.Date])
                                                 {
                                                     if (!result.ContainsKey(key))
@@ -1876,9 +2546,9 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
                                 if (attrNameAndType.name != "Days to Earnings")
                                 {
                                     var attrValue = csv.GetField<string>(attrNameAndType.name);
-                                    if (string.IsNullOrEmpty(attrValue) && defaultValues != null && defaultValues.ContainsKey(symbol) && defaultValues[symbol] != null && defaultValues[symbol].ContainsKey(listDateTime) && defaultValues[symbol][listDateTime] != null && defaultValues[symbol][listDateTime].ContainsKey(attrNameAndType.name))
+                                    if (string.IsNullOrEmpty(attrValue) && defaultValues != null && defaultValues.ContainsKey(symbol) && defaultValues[symbol] != null && defaultValues[symbol].ContainsKey(currentDataFileDateTime) && defaultValues[symbol][currentDataFileDateTime] != null && defaultValues[symbol][currentDataFileDateTime].ContainsKey(attrNameAndType.name))
                                     {
-                                        attrValue = defaultValues[symbol][listDateTime][attrNameAndType.name];
+                                        attrValue = defaultValues[symbol][currentDataFileDateTime][attrNameAndType.name];
                                         //WriteLine($"fileName={fileName} symbol={symbol} name={attrNameAndType.name} value={attrValue}");
                                     }
                                     if (attrNameAndType.name == "EPS Due Date")
@@ -1945,42 +2615,46 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
                         if(string.IsNullOrEmpty(sym))  continue;                        
                         if (skip)
                         {
-                            if (debug1) WriteLine($"adding row SKIP    [{sym}][{listDateTime}] from file={fileName}");
+                            if (debug1) WriteLine($"adding row SKIP    [{sym}][{currentDataFileDateTime}] from file={fileName}");
                         }
-                        else if (rows.ContainsKey(sym) && rows[sym].ContainsKey(listDateTime))
+                        else if (rows.ContainsKey(sym) && rows[sym].ContainsKey(currentDataFileDateTime))
                         {
                             foreach ((var key, var val) in result)
                             {
                                 var oldNotes = val;
                                 // concatenate the new value with the old value: @@todo@@: implement constraints on size and date of hold notes here!
-                                var newNote = rows[sym][listDateTime][key];
-                                HashSet<string> newTags;
-                                (newTags, newNote) = ExtractTags(newNote);
-                                HashSet<string> oldTags;
-                                (oldTags, oldNotes) = ExtractTags(oldNotes);
-
-                                //patNoteHeader = new Regex(@"^(\d{2}\s+(Sun|Mon|Tue|Wed|Thu|Fri|Sat)\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d+,?\s+\d{2}\s*<B>[A-Z]+</B>:)(\s*(\s*![A-Z]+!\s*))*(.*)$");
-                                var m = patNoteHeaderBody.Match(newNote);
-                                if (m.Success)
+                                var newNote = rows[sym][currentDataFileDateTime][key];
+                                // if newNote is not null, then we need to extract the tags from the new note and the old notes (notes) and put them at the head (of the new note)
+                                if (newNote is not null) 
                                 {
-                                    // replace group 4 with union of old and new tags
-                                    var newTagsString = string.Join(" ", oldTags.Union(newTags));
-                                    newNote = m.Groups[1].Value + " " + newTagsString + " " + m.Groups[5].Value.Trim() + " " + m.Groups[6].Value.Trim();
+                                    HashSet<string> newTags;
+                                    (newTags, newNote) = ExtractTags(newNote);
+                                    HashSet<string> oldTags;
+                                    (oldTags, oldNotes) = ExtractTags(oldNotes);
+
+                                    //patNoteHeader = new Regex(@"^(\d{2}\s+(Sun|Mon|Tue|Wed|Thu|Fri|Sat)\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d+,?\s+\d{2}\s*<B>[A-Z]+</B>:)(\s*(\s*![A-Z]+!\s*))*(.*)$");
+                                    var m = patNoteHeaderBody.Match(newNote);
+                                    if (m.Success)
+                                    {
+                                        // replace group 4 with union of old and new tags
+                                        var newTagsString = string.Join(" ", oldTags.Union(newTags));
+                                        newNote = m.Groups[1].Value + " " + newTagsString + " " + m.Groups[5].Value.Trim() + " " + m.Groups[6].Value.Trim();
+                                    }
+                                    rows[sym][currentDataFileDateTime][key] = newNote + "&#10;" + oldNotes;
                                 }
-                                rows[sym][listDateTime][key] = newNote + "&#10;" + oldNotes;
                             }
                         }
                         else
                         {
                             try
                             {
-                                rows[sym][listDateTime] = result;
-                                if (debug1) WriteLine($"adding row         [{sym}][{listDateTime}] from file={fileName}");
+                                rows[sym][currentDataFileDateTime] = result;
+                                if (debug1) WriteLine($"adding row         [{sym}][{currentDataFileDateTime}] from file={fileName}");
                             }
                             catch (System.ArgumentException)
                             {
-                                rows[sym][listDateTime][$"{name}Notes"] = notes + "&#10;" + rows[sym][listDateTime][$"{name}Notes"];
-                                if(debug1) WriteLine($"appending row         [{sym}][{listDateTime}][{name}Notes] notes={notes} from file={fileName}");
+                                rows[sym][currentDataFileDateTime][$"{name}Notes"] = notes + "&#10;" + rows[sym][currentDataFileDateTime][$"{name}Notes"];
+                                if(debug1) WriteLine($"appending row         [{sym}][{currentDataFileDateTime}][{name}Notes] notes={notes} from file={fileName}");
                             }
                         }
                     }
@@ -2015,6 +2689,23 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
                 }
             }
         }
+    }
+    /// <summary>
+    /// Adjusts a given date to account for market holidays by shifting it to the previous Friday if it falls on a
+    /// weekend.
+    /// @@todo@@ Accommodate other holidays besides Saturday and Sunday.
+    /// @@todo@@ Accommodate the case when this is a Sunday and the master data files in defaultValues has been updated on Saturday.
+    /// </summary>
+    /// <param name="listDateTime">Represents the date and time of the CSV data file being processed.</param>
+    /// <returns>Returns the adjusted date as a DateTime object.</returns>
+    static DateTime AdjustDateForMarketHolidays(DateTime listDateTime)
+    {
+        var ldt = listDateTime; // date time of the csv data file.
+        if (listDateTime.DayOfWeek == DayOfWeek.Sunday)
+            ldt = ldt.AddDays(-2); // if today is Sunday, then the data file is from Friday
+        else if (listDateTime.DayOfWeek == DayOfWeek.Saturday)
+            ldt = ldt.AddDays(-1); // if today is Saturday, then the data file is from Friday
+        return ldt;
     }
 
     private static (HashSet<string>, string) ExtractTags(string note)

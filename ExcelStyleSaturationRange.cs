@@ -11,7 +11,7 @@ public class ExcelStyleSaturationRange
     {
         get
         {
-            return InputMetric * SaturationScale + SaturationOffset; // ' use linear mapping to compute Saturation based some metric like composite value. SaturationOffest & SaturationScale were perviously computed from the composit rating
+            return InputMetric * SaturationScale + SaturationOffset; // ' use linear mapping to compute Saturation based some metric like composite value. SaturationOffest & SaturationScale were perviously computed from the composite rating
         }
     }
     public double SaturationScale { get; set; } = 2.3;
@@ -81,6 +81,10 @@ public class ExcelStyleSaturationRange
             var result = String.Format("{0:X2}{1:X2}{2:X2}", c.R, c.G, c.B);
             return result;
         }
+    }
+    public override string ToString()
+    {
+        return $"Hue: {Hue} Saturation: {Saturation}, ColorHexRGB: {ColorHexRGB} Luminance={Luminance} InputMetric: {InputMetric} InputMetricMax: {InputMetricMax} InputMatrixMin={InputMetricMin}";
     }
 }
 
