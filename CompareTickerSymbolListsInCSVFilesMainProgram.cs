@@ -2,6 +2,7 @@
 using CsvHelper;
 using System.Diagnostics;
 using System.Globalization;
+using System.IO.Compression;
 using System.Text;
 using System.Text.RegularExpressions;
 using static System.Console;
@@ -119,6 +120,7 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
          //"ETF Indicies.csv",
          //"Top Sectors ETFs.csv",
          "Near Pivot.csv",
+         "Breaking Out Today.csv",
          "Watch.csv",
          //"watch closely.csv",
          "William J. O'Neil.csv",
@@ -173,14 +175,14 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
     static Regex patCheckStockFileLists = new Regex(@"--[Cc]heck(Stock(File(Lists)?)?)?");
     static readonly Regex patMasterStockList = new Regex("--[Mm]asterStockList(File)?$"); // beware! these are are weird: they don't have an "="
     static readonly Regex patMasterETFList = new Regex("--[Mm]asterETFList(File)?$"); // beware! these are are weird: they don't have an "="
-    static readonly Regex patFileNameHasVersion = new Regex(@"^(.*)( \([0-9]+\))(\.csv)$");
+    static readonly Regex patFileNameHasVersion = new Regex(@"^(.*)( \(([0-9]+)\))(\.csv)$");
     static Regex patOutputFileName = new Regex(@"--[Oo]ut(put(File(Name)?)?)?=([-A-Za-z0-9:\\%_\.]+)$");
     static Regex patBrokerageAccountEquitySymbol = new Regex(@"^([^:]+):([^:]+):([^:]+)$");
     static string NoteColumnWidth = "400";
     static string SymbolColumnWidth = "37";//"32.75";
     static List<Regex> patSkipFiles = new List<Regex> {
         //new Regex(@"sss Schwab NetLiqPercent(-(full|partial))?\.csv"),
-        new Regex(@"\([0-9]+\)\.csv$"),
+        //new Regex(@"\([0-9]+\)\.csv$"),
         new Regex(@"^ETF Indicies\.csv$"),
         new Regex(@"Consolidated."),
         //new Regex(@"^sss Schwab (NetLiqPercent|DATR21AccntPercent|DATR21)(-(full|partial))\.csv$"),
@@ -259,11 +261,15 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
     SortedDictionary<string, string> mapSortOrderPrefixedFileNameToFileName = new();
     SortedDictionary<string, string> mapFileNameToSortOrderPrefixedFileName = new();
 
+    SortedDictionary<string, string> mapFileNameToColumnHeader = new();
+
     // @@todo@@ this is superfluous! Remove this and mapSortOrderPrefixedFileNameToColumnPosition
     string[] sortOrderPrefixedFileNames;
 
     bool fullPositionStatement = false; // true if the position statement contains all accounts
     static readonly Regex patFullOutputFileName = new Regex(@"-full\.xml$"); // if the output file name ends with -full.xml then the full position statement is being used.
+
+    List<(string orderBy, string colorCodedAttributeName)> workSheets = new ();
 
     public static void Main(string[] args)
     {
@@ -273,7 +279,7 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
         string initialRow = args.Length > 0 && Int32.TryParse(args[0], out Int32 _) ? args[0] : "6";
         var generateCSV = false;
         var generateXML = true;
-        SortedDictionary<string, string> mapFileNameToColumnHeader = new();
+        
         AutoMultiDimSortedDictionary<string/*symbol*/, AutoInitSortedDictionary<string/*file name only*/, SortedSet<DateTime>>> mapSymbolToFileNameToDates = new();
         SortedDictionary<string, DateTime> mapFileNameToMostRecentFileDate = new();
         SortedDictionary<DateTime, string> mapMostRecentDateToFile = new(new DescendingComparer<DateTime>());
@@ -287,13 +293,12 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
         args = GetFileNamesAndSwitchesFromArgs(args);
         var verticalSplitter = false;
         var excelStyles = new AutoInitSortedDictionary<string/* Hexadecimal color name */, ExcelStyle>();
-        var workSheets = new List<(string orderBy, string colorCodedAttributeName)>();
         // emacs solve([0 * m + b = 120, 1 * m + b = 235], [m, b])==[m = 115, b = 120]
         //var stockExcelHueAgeStyle = new ExcelStyleHueRange { Saturation = 240f, Luminance = 240f, HueMin = 120.0 / 360.0 * 255.0, HueMax = 235 / 360.0 * 255.0, InputMetricMin = 0, InputMetricMax = 1, HueScale = 115.0, HueOffset = 120 };
         main.stockExcelSaturationAgeStyle = new ExcelStyleSaturationRange { Hue = 120.0 / 360.0 * 255.0, Luminance = 240f, SaturationMin = 120.0 / 360.0 * 255.0, SaturationMax = 355.0 / 360.0 * 255.0, InputMetricMin = 0, InputMetricMax = 1, SaturationScale = 115.0, SaturationOffset = 120 };
         var mapAttributeNameToScreenTip = new Dictionary<string, (bool tip, string displayName, Func<string, string> convert)>();
         AutoMultiDimSortedDictionary<string/*symbol*/, AutoMultiDimSortedDictionary<DateTime, AutoInitSortedDictionary<string/*ageMetric name*/, string/*ageMetric value*/>>>? emptyDefaultValues = null;
-        
+
         var masterStockListFilePath = ExpandEnvironmentVariables(@"%DN%\MinDollarVol10MComp50.csv");
         var masterETFListFilePath = ExpandEnvironmentVariables(@"%DN%\MinDollarVol10MComp50ETF.csv");
         var csvDataFilesLoadList = new List<string>();
@@ -313,7 +318,7 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
         foreach (var pf in preferredFiles)
             if (!SkipFile(pf))
                 requiredFiles.Add(pf);
-            else if  (!generateMasterRegexList)
+            else if (!generateMasterRegexList)
                 WriteLine($"skipping file {pf}");
         var idxArgs = 0;
         bool addSkipFiles = true;
@@ -358,12 +363,12 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
                     idxArgs++;
                     arg = args[idxArgs];
                 }
-                workSheets.Add((orderBy: orderByTemp.Replace('_', ' '), colorCodedAttributeName: colorCodedAttributeName.Replace('_', ' ')));
+                main.workSheets.Add((orderBy: orderByTemp.Replace('_', ' '), colorCodedAttributeName: colorCodedAttributeName.Replace('_', ' ')));
                 SymbolColumnWidth = "55";
             }
             else if (arg == "--noWildCards")
             {
-                // skip, already handled
+                // skipBaseFile, already handled
             }
 
             else if (patGenerateMasterSymbolList.Match(arg).Success /*fileName == "--masterList"*/)
@@ -435,7 +440,7 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
                 if (!string.IsNullOrEmpty(fn))
                 {
                     masterStockListFilePath = ExpandEnvironmentVariables(fn);
-                    ConditionallyAddUnversionedFileNameToSkipList(fn);
+                    //ConditionallyAddUnVersionedFileNameToSkipList(fn);
                     if (!generateMasterRegexList)
                         WriteLine($"masterStockListFilePath = {masterStockListFilePath}");
                 }
@@ -447,7 +452,7 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
                 {
                     masterETFListFilePath = ExpandEnvironmentVariables(fn);
                     var m = patFileNameHasVersion.Match(Path.GetFileName(fn));
-                    ConditionallyAddUnversionedFileNameToSkipList(fn);
+                    //ConditionallyAddUnVersionedFileNameToSkipList(fn);
                     if (!generateMasterRegexList)
                         WriteLine($"masterETFListFilePath = {masterETFListFilePath}");
                 }
@@ -464,32 +469,52 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
                     // Assumption: the full position statement file name contains all accounts and the partial position statement file name does not contain all of them.
                     // @@todo@@: --outputFileName is now required if we are going to deal with partial v full position statements.
                     // what to do? error out if --outputFileName is not present?
-                    var patstr = @"^(sss Schwab )?(Net\s*Liq|DATR21)\s*(Net\s*Liq|(Accnt|ManagedBy)(\s*Group)?)?(\s*Percent)?" + (main.fullPositionStatement ? "":"-full" ) + @"\.csv$";
+                    var patstr = @"^(sss Schwab )?(Net\s*Liq|DATR21)\s*(Net\s*Liq|(Accnt|ManagedBy)(\s*Group)?)?(\s*Percent)?" + (main.fullPositionStatement ? "" : "-full") + @"\.csv$";
                     var pat = new Regex(patstr);
-                    var xyz = pat.Match("sss Schwab DATR21-full.csv").Success;
+                    //var xyz = pat.Match("sss Schwab DATR21-full.csv").Success;
                     patSkipFiles.Add(pat);
                     addSkipFiles = false;
                 }
 
+
                 var fn = Path.GetFileName(arg);
-                bool skip = SkipFile(fn);
-                if (requiredFiles.Contains(fn))
+                (string baseNameNoVersionFn, bool versioned) = GetBaseFileNameNoVersions(fn);
+                var annotation = versioned ? $"({Path.GetFileName(baseNameNoVersionFn)})" : "";
+
+                bool skipBaseFile = SkipFile(baseNameNoVersionFn);
+                bool skipFile = SkipFile(fn);
+                if (versioned && requiredFiles.Contains(baseNameNoVersionFn))
                 {
-                    requiredFiles.Remove(fn);
+                    requiredFiles.Remove(baseNameNoVersionFn); // Keep a running list of remaining files to be loaded
+                    if (!generateMasterRegexList && !main.CheckStockFileLists)
+                        WriteLine($"Found required file '{baseNameNoVersionFn}'");
+                }
+                else if (!versioned && requiredFiles.Contains(fn))
+                {
+                    requiredFiles.Remove(fn); // Keep a running list of remaining files to be loaded
                     if (!generateMasterRegexList && !main.CheckStockFileLists)
                         WriteLine($"Found required file '{fn}'");
                 }
-                else if (!generateMasterRegexList && !main.CheckStockFileLists && !skip)
+                else if (!versioned & !generateMasterRegexList && !main.CheckStockFileLists && !skipFile)
                 {
-                    WriteLine($"Found extra file '{fn}'.");
+                    WriteLine($"Found extra file '{fn}'");
+                }
+                else if (versioned && !generateMasterRegexList && !main.CheckStockFileLists && !skipBaseFile)
+                {
+                    WriteLine($"Found extra file '{baseNameNoVersionFn}'");
                 }
                 if (!main.CheckStockFileLists)
                 {
-                    if (skipConfidential && confidential.Contains(fn) && !generateMasterRegexList)
+                    if (skipConfidential && confidential.Contains(baseNameNoVersionFn) && !generateMasterRegexList)
                     {
-                        WriteLine($"Skipping confidential file '{fn}'");
+                        WriteLine($"Skipping confidential file '{baseNameNoVersionFn}'");
                     }
-                    else if (skip)
+                    else if (skipBaseFile)
+                    {
+                        if (!generateMasterRegexList)
+                            WriteLine($"Skipping file '{baseNameNoVersionFn}'");
+                    }
+                    else if (skipFile)
                     {
                         if (!generateMasterRegexList)
                             WriteLine($"Skipping file '{fn}'");
@@ -502,9 +527,10 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
             }
             idxArgs++;
         }
-        
 
-        bool flowControl = ExitIfDownloadsDirectoryContainsParens();
+        RemoveOlderVersionedFileNamesFromFilesList(csvDataFilesLoadList);
+
+        bool flowControl = true; // ExitIfDownloadsDirectoryContainsParens();
         if (!flowControl && !generateMasterRegexList)
         {
             WriteLine("Downloads directory files contain parentheses. Please remove them and try again.");
@@ -526,7 +552,7 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
             //if (!SkipFile(file)) requiredFiles.Add(file);
             patSkipFiles.Add(new Regex(Regex.Escape(file)
                 //, RegexOptions.IgnoreCase
-                ));
+                )); // the master files are special csv files that are not to be processed like the other csv files.
         }
 
         try
@@ -564,54 +590,15 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
                 );
         }
         var stStyles = "";
-        var workSheetXML = new List<string>();
         main.sortOrderPrefixedFileNames = MakeFileNamesArray(main.mapSortOrderPrefixedFileNameToColumnPosition); // main.mapSortOrderPrefixedFileNameToColumnPosition (keys only) populated in LoadCSVDataFiles
-        mapFileNameToColumnHeader = MakeMapFileNameToColumnHeader(main.sortOrderPrefixedFileNames);
+        main.mapFileNameToColumnHeader = MakeMapFileNameToColumnHeader(main.sortOrderPrefixedFileNames);
         var finalExcelOutputFilePath = string.IsNullOrEmpty(main.outputFileName) ? ExpandEnvironmentVariables(@$"%USERPROFILE%\Downloads\CompareMarketSmithLists_{DateTime.Now.ToString("yyyy-MMM-dd-ddd-HH")}.{(generateCSV || generateMasterRegexList ? "csv" : "xml")}") : ExpandEnvironmentVariables(main.outputFileName);
         if (!generateMasterRegexList)
             WriteLine($"finalOutputFilename = {finalExcelOutputFilePath}");
         var saveColumnCurrent = columnCurrent;
-        var sbLegend = new StringBuilder();
-        foreach (var worksheet in workSheets)
-        {
-            sbLegend.Append("""<Row><Cell><Data ss:Type="String">""");
-            sbLegend.Append($"Sort by {worksheet.orderBy} {(string.IsNullOrEmpty(worksheet.colorCodedAttributeName) ? "" : $"-Color by {worksheet.colorCodedAttributeName}")}");
-            sbLegend.Append("</Data></Cell></Row>\n");
-        }
-        foreach (var (key, value) in flags)
-        {
-            sbLegend.Append("""<Row><Cell><Data ss:Type="String">""");
-            sbLegend.Append($"{key} = {value}");
-            sbLegend.Append("</Data></Cell></Row>\n");
-        }
-        var legend = $"""
-            <Worksheet ss:Name="Legend">
-             <Table ss:ExpandedColumnCount="1" ss:ExpandedRowCount="{workSheets.Count() + flags.Count()}" x:FullColumns="1"
-              x:FullRows="1" ss:DefaultRowHeight="15">
-              <Column ss:AutoFitWidth="0" ss:Width="417"/>
-              {sbLegend.ToString()}
-             </Table>
-             <WorksheetOptions xmlns="urn:schemas-microsoft-com:office:excel">
-              <PageSetup>
-               <Header x:Margin="0.3"/>
-               <Footer x:Margin="0.3"/>
-               <PageMargins x:Bottom="0.75" x:Left="0.7" x:Right="0.7" x:Top="0.75"/>
-              </PageSetup>
-              <Selected/>
-              <Panes>
-               <Pane>
-                <Number>3</Number>
-                <ActiveRow>9</ActiveRow>
-               </Pane>
-              </Panes>
-              <ProtectObjects>False</ProtectObjects>
-              <ProtectScenarios>False</ProtectScenarios>
-             </WorksheetOptions>
-            </Worksheet>
-            """;
-        workSheetXML.Add(legend);
+        List<string> workSheetXML = main.MakeLegendWorksheet();
         var worksheetCount = 0;
-        foreach (var workSheet in workSheets)
+        foreach (var workSheet in main.workSheets)
         {
             var sbXMLWorksheetRows = new StringBuilder();
             var xmlColumnWidths = new List<string> { """<Column ss:Width="15" />""" }; // why does the width have no affect?
@@ -623,9 +610,10 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
                 //main.mapFileNameToSymbolToDatesToAttributes, 
                 main.masterSymbolListForWorksheet,
                 //mapSortOrderPrefixedFileNameToColumnPosition,
-                mapFileNameToColumnHeader, mapSymbolToFileNameToDates, sbXMLWorksheetRows, sbCSV, debug, ref rowCount, ref columnCurrent, excelStyles, fileNamesWithHistory, columnCount, historyDirectoryDateArray, mapAttributeNameToScreenTip, workSheet);
+                //mapFileNameToColumnHeader, 
+                mapSymbolToFileNameToDates, sbXMLWorksheetRows, sbCSV, debug, ref rowCount, ref columnCurrent, excelStyles, fileNamesWithHistory, columnCount, historyDirectoryDateArray, mapAttributeNameToScreenTip, workSheet);
             var columnHeaders = $"""<Cell ss:StyleID="s62"><Data ss:Type="String">Order</Data><NamedCell ss:Name="_FilterDatabase"/></Cell>"""
-                + $"""{string.Join("", (main.sortOrderPrefixedFileNames.OrderBy(fn => main.mapSortOrderPrefixedFileNameToColumnPosition[fn])).Select(fn => $"""<Cell ss:StyleID="s62"><Data ss:Type="String">{patAddSpaceNotesSwitch.Replace(mapFileNameToColumnHeader[fn], m => $"{m.Groups[1].Value} {m.Groups[2].Value}")}</Data><NamedCell ss:Name="_FilterDatabase"/></Cell>"""))} """
+                + $"""{string.Join("", (main.sortOrderPrefixedFileNames.OrderBy(fn => main.mapSortOrderPrefixedFileNameToColumnPosition[fn])).Select(fn => $"""<Cell ss:StyleID="s62"><Data ss:Type="String">{patAddSpaceNotesSwitch.Replace(main.mapFileNameToColumnHeader/*mapFileNameToColumnHeader*/[fn], m => $"{m.Groups[1].Value} {m.Groups[2].Value}")}</Data><NamedCell ss:Name="_FilterDatabase"/></Cell>"""))} """
                 + "";
             columnHeaders += $"""{string.Join("", (mapPositionToAttributeName.Select(positionNamePair => $"""<Cell ss:StyleID="s62"><Data ss:Type="String">{positionNamePair.Value.displayName}</Data><NamedCell ss:Name="_FilterDatabase"/></Cell>""")))}""";
             columnCount += mapPositionToAttributeName.Count;
@@ -785,15 +773,124 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
         }
     }
 
-    private static void ConditionallyAddUnversionedFileNameToSkipList(string fn)
+    static (string,bool) GetBaseFileNameNoVersions(string fn)
+    {
+        var m = patFileNameHasVersion.Match(fn);
+        var baseNameNoVersionFn = m.Success ? m.Groups[1].Value + m.Groups[4].Value : fn;
+        return (baseNameNoVersionFn, m.Success);
+    }
+
+    /// <summary>
+    /// When two file names are the same except for a version number (as per the browser convenction of appending an integer enclosed by parentheses to the file name before the extension) delete the older one from the list.
+    /// </summary>
+    /// <returns></returns>
+    static void RemoveOlderVersionedFileNamesFromFilesList(List<string> dataFiles)
+    {
+        var mapBaseFileNameToFullFileNameAndVersion = new Dictionary<string, (string fullFileName, int version)>();
+        foreach (var filePath in dataFiles)
+        {
+            var fileName = Path.GetFileName(filePath);
+            var m = patFileNameHasVersion.Match(fileName);
+            if (m.Success)
+            {
+                var baseFileName = m.Groups[1].Value + m.Groups[4].Value;
+                var version = int.Parse(m.Groups[3].Value);
+                if (mapBaseFileNameToFullFileNameAndVersion.ContainsKey(baseFileName))
+                {
+                    var (existingFullFileName, existingVersion) = mapBaseFileNameToFullFileNameAndVersion[baseFileName];
+                    if (version > existingVersion)
+                    {
+                        if(!generateMasterRegexList)
+                            WriteLine($"remove older versioned file {existingFullFileName} in favor of newer versioned file {filePath}");
+                        // replace with the newer version
+                        mapBaseFileNameToFullFileNameAndVersion[baseFileName] = (filePath, version);
+                    }
+                }
+                else
+                {
+                    mapBaseFileNameToFullFileNameAndVersion[baseFileName] = (filePath, version);
+                }
+            }
+            else
+            {
+                // not a versioned file name, but there might already be a versioned file name for this base file name
+                if (!mapBaseFileNameToFullFileNameAndVersion.ContainsKey(fileName))
+                    mapBaseFileNameToFullFileNameAndVersion[fileName] = (filePath, 0);
+                else
+                {
+                    //patSkipFiles.Add(new Regex("^" + Regex.Escape(fileName) + "$")); // skipBaseFile the unversioned file if the versioned file is present
+                    if (!generateMasterRegexList)
+                        WriteLine($"skipBaseFile file {fileName} because it superseded by {mapBaseFileNameToFullFileNameAndVersion[fileName].fullFileName}");
+                }
+                
+            }
+        }
+        // now rebuild the dataFiles list
+        dataFiles.Clear();
+        foreach (var (fullFileName, _) in mapBaseFileNameToFullFileNameAndVersion.Values)
+        {
+            dataFiles.Add(fullFileName);
+        }
+
+    }
+
+
+    List<string> MakeLegendWorksheet()
+    {
+        var sbLegend = new StringBuilder();
+        var workSheetXML = new List<string>();
+        sbLegend.Append("""<Row><Cell><Data ss:Type="String">Workseets</Data></Cell><Cell><Data ss:Type="String">Description</Data></Cell></Row>\n""");
+        foreach (var worksheet in workSheets)
+        {
+            sbLegend.Append("""<Row><Cell><Data ss:Type="String">""");
+            sbLegend.Append($"Sort by {worksheet.orderBy} {(string.IsNullOrEmpty(worksheet.colorCodedAttributeName) ? "" : $"-Color by {worksheet.colorCodedAttributeName}")}");
+            sbLegend.Append("</Data></Cell></Row>\n");
+        }
+        sbLegend.Append("""<Row><Cell><Data ss:Type="String">Flags</Data></Cell><Cell><Data ss:Type="String">Meaning</Data></Cell></Row>\n""");
+        foreach (var (key, value) in flags)
+        {
+            sbLegend.Append("""<Row><Cell><Data ss:Type="String">""");
+            sbLegend.Append($"{key}");
+            sbLegend.Append($"""</Data></Cell><Cell><Data ss:Type="String"> {value}  </Data> </Cell></Row>\n""");
+        }
+        var legend = $"""
+            <Worksheet ss:Name="Legend">
+             <Table ss:ExpandedColumnCount="2" ss:ExpandedRowCount="{workSheets.Count() + 1 + flags.Count() + 1}" x:FullColumns="1" x:FullRows="1" ss:DefaultRowHeight="15">
+              <Column ss:AutoFitWidth="0" ss:Width="417"/>
+              <Column ss:AutoFitWidth="0" ss:Width="417"/>
+              {sbLegend.ToString()}
+             </Table>
+             <WorksheetOptions xmlns="urn:schemas-microsoft-com:office:excel">
+              <PageSetup>
+               <Header x:Margin="0.3"/>
+               <Footer x:Margin="0.3"/>
+               <PageMargins x:Bottom="0.75" x:Left="0.7" x:Right="0.7" x:Top="0.75"/>
+              </PageSetup>
+              <Selected/>
+              <Panes>
+               <Pane>
+                <Number>3</Number>
+                <ActiveRow>9</ActiveRow>
+               </Pane>
+              </Panes>
+              <ProtectObjects>False</ProtectObjects>
+              <ProtectScenarios>False</ProtectScenarios>
+             </WorksheetOptions>
+            </Worksheet>
+            """;
+        workSheetXML.Add(legend);
+        return workSheetXML;
+    }
+
+    private static void ConditionallyAddUnVersionedFileNameToSkipList(string fn)
     {
         var m = patFileNameHasVersion.Match(Path.GetFileName(fn));
         if (m.Success)
         {
             var noVersionFileName = m.Groups[1].Value + m.Groups[3].Value;
-            patSkipFiles.Add(new Regex("^" + Regex.Escape(noVersionFileName) + "$")); // skip the unversioned file if the versioned file is present
+            patSkipFiles.Add(new Regex("^" + Regex.Escape(noVersionFileName) + "$")); // skipBaseFile the unversioned file if the versioned file is present
             if (!generateMasterRegexList)
-                WriteLine($"adding unversioned file {noVersionFileName} to the skip list");
+                WriteLine($"adding unversioned file {noVersionFileName} to the skipBaseFile list");
         }
     }
 
@@ -814,11 +911,11 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
                    || fileName.Contains("MinDollarVol10MComp50") // special master list
                    || fileName.Contains("Top Rated Growth Funds") // skipped
                    || fileName.Contains("Top Rated Value Funds")  // skipped
-                   || fileName.Contains("Top 25 Sector Funds Over 3 Years") // skipped @@todo@@ check the skip list instead of hard coding these!
+                   || fileName.Contains("Top 25 Sector Funds Over 3 Years") // skipped @@todo@@ check the skipBaseFile list instead of hard coding these!
                    || fileName.Contains("Top 25 Funds Over 10 years") // skipped
                    || fileName.Contains("ETF Indicies"))          // used (maybe) but we ignore the parens
                 {
-                    // skip these files: we have special logic to handle these files when they include parentheses
+                    // skipBaseFile these files: we have special logic to handle these files when they include parentheses
                     continue;
                 }
                 if (fileName.Contains('(') || fileName.Contains(')'))
@@ -839,7 +936,8 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
     /// <param name="emptyDefaultValues">Provides a structure for default values that can be used if no data is found.</param>
     /// <param name="defaultValuesFileName">Indicates the file name of the CSV containing default values to be parsed.</param>
     /// <param name="defaultETFValuesFileName">Indicates the file name of the CSV containing ETF default values to be parsed.</param>
-    void MergeParseAndLoadMasterLists(int maxEventAge, AutoMultiDimSortedDictionary<string, AutoMultiDimSortedDictionary<DateTime, AutoInitSortedDictionary<string, string>>>? emptyDefaultValues, string defaultValuesFileName, string defaultETFValuesFileName)
+    void MergeParseAndLoadMasterLists(int maxEventAge, AutoMultiDimSortedDictionary<string, AutoMultiDimSortedDictionary<DateTime, AutoInitSortedDictionary<string, string>>>? emptyDefaultValues, string defaultValuesFileName,
+        string defaultETFValuesFileName)
     {
         if(!generateMasterRegexList && !CheckStockFileLists)
             WriteLine($"Merging master lists from {defaultValuesFileName} and {defaultETFValuesFileName} with maxEventAge={maxEventAge}");
@@ -856,10 +954,12 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
     void LoadCSVDataFiles(int backHistoryDayCount, int maxEventAge, bool generateMasterRegexList/*, SortedDictionary<string, int> mapSortOrderPrefixedFileNameToColumnPosition*/, AutoMultiDimSortedDictionary<string, AutoInitSortedDictionary<string, SortedSet<DateTime>>> mapSymbolToFileNameToDates, SortedDictionary<string, DateTime> mapFileNameToMostRecentFileDate, SortedDictionary<DateTime, string> mapMostRecentDateToFile, ref int columnCurrent, AutoMultiDimSortedDictionary<string, AutoMultiDimSortedDictionary<DateTime, AutoInitSortedDictionary<string, string>>>? emptyDefaultValues, ref IEnumerable<History> history, ref SortedSet<DateTime> historyDates, SortedSet<string> fileNamesWithHistory, string fileName)
     {
         //var sortOrderPrefixedFileNames = ExpandFilePaths(fileName);
-        fileName = ExpandEnvironmentVariables(fileName);
-        var skip = SkipFile(fileName);
+        fileName = ExpandEnvironmentVariables(fileName); // this fileName may contain the browser version number in parentheses        
+        (var baseNameNoVersionFn, var versioned) = GetBaseFileNameNoVersions(/*Path.GetFileName*/(fileName));
+        var annotation = versioned ? $"({Path.GetFileName(baseNameNoVersionFn)}) " : "";
+        var skip = SkipFile(versioned ? baseNameNoVersionFn: fileName); // never process a file more than once
 
-        if (File.Exists(fileName) && !skip)
+        if (File.Exists(fileName) && !skip) // @@todo@@ reverse order of conditions
         {
             try
             {
@@ -870,12 +970,13 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
                 {
                     if(csvCurrentData.Count == 0)
                     {
-                        WriteLine($"No data found in file {fileName}, skipping");
+                        WriteLine($"No data found in file {fileName}{annotation}, skipping");
                         return;
                     }
-                    WriteLine($"Loaded file {fileName} with {csvCurrentData.Count} symbols and {csvCurrentData.Values.SelectMany(d => d.Keys).Count()} dates");
-                }               
+                    WriteLine($"Loaded file {fileName}{annotation} with {csvCurrentData.Count} symbols and {csvCurrentData.Values.SelectMany(d => d.Keys).Count()} dates");
+                }                
                 fileName = Path.GetFileName(fileName);
+                baseNameNoVersionFn = Path.GetFileName(baseNameNoVersionFn);
                 if (generateMasterRegexList)
                     history = new List<History>();
                 else
@@ -883,18 +984,23 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
                     var downloadDirs = Directory.GetDirectories(ExpandEnvironmentVariables(@"%USERPROFILE%\Downloads")).ToList();
                     var downloadDirs2 = Directory.GetDirectories(ExpandEnvironmentVariables(@"%DN002%"));
                     downloadDirs.AddRange(downloadDirs2);
-                    history = downloadDirs.Select(d => new { Name = Path.GetFileName(d), Path = d }).Where(d => patDateTime_YYYY_MMM_dd_ddd.Match(d.Name).Success).Select(d => { var m = patDateTime_YYYY_MMM_dd_ddd.Match(d.Name); var r = new { Name = d.Name, Path = d.Path, Date = System.DateTime.Parse(m.Groups[1].Value) }; return r; }).OrderByDescending(d => d.Date).Take(backHistoryDayCount).Select(f => new History { Date = f.Date, FileExists = System.IO.File.Exists(Path.Combine(f.Path + "\\" + fileName)), Name = System.IO.Path.Combine(f.Path + "\\" + fileName) });
+                    // assumption: there are no file names in the history that have browser version numbers
+                    history = downloadDirs.Select(d => new { Name = Path.GetFileName(d), Path = d }).Where(
+                        d => patDateTime_YYYY_MMM_dd_ddd.Match(d.Name).Success).Select(
+                        d => { var m = patDateTime_YYYY_MMM_dd_ddd.Match(d.Name); var r = new { Name = d.Name, Path = d.Path, Date = System.DateTime.Parse(m.Groups[1].Value) }; return r; }).OrderByDescending(
+                        d => d.Date).Take(backHistoryDayCount).Select(
+                        f => new History { Date = f.Date, FileExists = System.IO.File.Exists(Path.Combine(f.Path + "\\" + fileName)), Name = System.IO.Path.Combine(f.Path + "\\" + fileName) });
                 }
                 mapMostRecentDateToFile[listDateTime.Date] = fileName;
                 mapFileNameToMostRecentFileDate[fileName] = listDateTime.Date;
                 MakeHistoryDateSet(history, TODAY, ref historyDates);
-                UpdateMapSymbolToFileNameToDates(mapSymbolToFileNameToDates, fileName, csvCurrentData);
+                UpdateMapSymbolToFileNameToDates(mapSymbolToFileNameToDates, baseNameNoVersionFn, csvCurrentData);
                 UpdateMapFileNameToSymbolToDateToAttributes(mapFileNameToSymbolToDatesToAttributes, fileName, csvCurrentData);
                 if (!generateMasterRegexList)
                 {
                     foreach (var oldFile in history)
                     {
-                        if (oldFile.FileExists)
+                        if (oldFile.FileExists) // this should not have version numbers
                         {
                             var csvHistoryData = ParseCSV(oldFile.Name, oldFile.Date, emptyDefaultValues, int.MaxValue);
                             foreach (var sym in csvCurrentData.Keys)
@@ -915,21 +1021,21 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
                         }
                     }
                 }                
-                var sortOrderPrefixedFileName = MaybeAddSortOrderPrefix(fileName);
+                var sortOrderPrefixedFileName = MaybeAddSortOrderPrefix(baseNameNoVersionFn);
                 mapSortOrderPrefixedFileNameToColumnPosition[sortOrderPrefixedFileName] = 0; // Populate values later
-                mapSortOrderPrefixedFileNameToFileName[sortOrderPrefixedFileName] = fileName;
-                mapFileNameToSortOrderPrefixedFileName[fileName]= sortOrderPrefixedFileName;
+                mapSortOrderPrefixedFileNameToFileName[sortOrderPrefixedFileName] = baseNameNoVersionFn;
+                mapFileNameToSortOrderPrefixedFileName[fileName] = sortOrderPrefixedFileName;
 				
                 columnCurrent++;
             }
             catch (IOException ex)
             {
-                WriteLine($"skipping file {fileName} Error={ex}");
+                WriteLine($"skipping file {fileName}{annotation} Error={ex}");
             }
         }
         else if (!generateMasterRegexList)
         {
-            WriteLine(((skip ? "Skip file" : "File not found") + ": ") + fileName);
+            WriteLine($"{((skip ? "Skip file" : "File not found") + ": ")} {fileName}{annotation}");
         }
     }
     static string ComposeWorkSheet(string initialRow, string XMLWorksheetRows, string workSheetName, int rowCount, List<string> xmlColumnWidths, bool verticalSplitter, int columnCount, string columnHeaders)
@@ -1122,7 +1228,7 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
         //AutoMultiDimSortedDictionary<string, AutoMultiDimSortedDictionary<string, AutoMultiDimSortedDictionary<DateTime, AutoInitSortedDictionary<string, string>>>> mapFileNameToSymbolToDatesToAttributes, 
         SortedDictionary<string, SymbolInList> masterSymbolListForWorksheet, 
         //SortedDictionary<string, int> mapSortOrderPrefixedFileNameToColumnPosition, 
-        SortedDictionary<string, string> mapFileNameToFileNameNoExt, 
+        //SortedDictionary<string, string> mapFileNameToFileNameNoExt, 
         AutoMultiDimSortedDictionary<string, AutoInitSortedDictionary<string, SortedSet<DateTime>>> mapSymbolToFileNameToDates, 
         StringBuilder sbXMLWorksheetRows,
         StringBuilder sbCSV, bool debug, ref int rowCount, ref int columnCurrent, 
@@ -1264,7 +1370,7 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
                             {
                                 sharesOrProfitLossOrUnitCost = sharesOrProfitLossOrUnitCost.Replace("$", "");
                             }
-                            var val = +(double.Parse(sharesOrProfitLossOrUnitCost=="-"?"0": sharesOrProfitLossOrUnitCost) / 100);
+                            var val = +(double.Parse((sharesOrProfitLossOrUnitCost=="-"|| sharesOrProfitLossOrUnitCost == "N/A") ?"0": sharesOrProfitLossOrUnitCost) / 100);
                             sharesOrProfitLossOrUnitCost = val.ToString();
                             if (val < -0.08)
                             {
@@ -1459,7 +1565,7 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
             // add other stock metrics here. Unlike the other spreadsheet columns these do not come from a single file.            
 
             rowCount++;
-            columnCurrent = mapFileNameToFileNameNoExt.Keys.Count;
+            columnCurrent = /*mapFileNameToFileNameNoExt*/this.mapFileNameToColumnHeader.Keys.Count;
             var metricCells = ""; skipOverBlankColumn = true;
             //var symbolOnly = symbol.Split(':').Reverse().FirstOrDefault(); // remove the Think or Swim equity/stock group  prefix
 
@@ -2232,34 +2338,36 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
         AutoMultiDimSortedDictionary<string/*symbol*/, AutoMultiDimSortedDictionary<DateTime, AutoInitSortedDictionary<string/*ageMetric name*/, string/*ageMetric value*/>>>? defaultValues,
         int maxEventAge)
     {
+        (var baseNameNoVersionFn, var versioned) = GetBaseFileNameNoVersions(Path.GetFileName(fileName));
+        var annotation = versioned ? $"({baseNameNoVersionFn}) " : "";
         var useCfg = true;
         AutoMultiDimSortedDictionary<string/*symbol*/, AutoMultiDimSortedDictionary<DateTime, AutoInitSortedDictionary<string/*ageMetric name*/, string/*ageMetric value*/>>> rows = new();
         var configuration = new CsvHelper.Configuration.CsvConfiguration(new CultureInfo("en-US", false))
         {
             MissingFieldFound = null,
             HasHeaderRecord = true
-        };
+        };       
         //WriteLine($"ParseCSV: open {fileName}");
         //System.Diagnostics.Debugger.Break();
         // if(!generateMasterRegexList) WriteLine($"ParseCSV: open {fileName}");
-        using (StreamReader reader = new StreamReader(fileName))
+        using (StreamReader reader = new StreamReader(fileName)) // use the raw file to open the csv file
         //using (var csv = new CsvHelper.CsvReader(reader,  new CsvHelper.Configuration.CsvConfiguration {  Delimiter = ",",  HasHeaderRecord = true })) {
         //using (CsvReader csv = new CsvReader(reader, CultureInfo.InvariantCulture))
         using (CsvReader csv = useCfg ? new CsvReader(reader, configuration) : new CsvReader(reader, CultureInfo.InvariantCulture))
         {
             //csv.Configuration.HasHeaderRecord = false;
 
-            var isNotesFileName = patNotes.Match(fileName);
+            var isNotesFileName = patNotes.Match(baseNameNoVersionFn);
             var isCommentsFileName = isNotesFileName.Success ? isNotesFileName.Groups[3].Value == "Comments" : false;
             var isFormulasFileName = isNotesFileName.Success ? isNotesFileName.Groups[3].Value == "Formulas" : false;
-            var isSymbolFileName = patSymbolName.Match(fileName);
-            var isUnrealizedGainName = patUnrealizedGains.Match(fileName);
-            var isSchwabGroupFileName = patGroup.Match(fileName);
-            var isSchwabATR21DayFileName = patAtr21Day.Match(fileName);
-            var isSchwabNetLiqPercentFileName = patNetLiqPercent.Match(fileName);
-            var isAccountFileName = patAccount.Match(fileName);
-            var isDecoratedSymbolFileName = patDecoratedSymbol.Match(fileName);
-            //isAccountFileName = new Regex(@$"({patSortOrderPrefix})\s*([a-zA-Z0-9]*)\s*Account(\.csv)?$").Match(fileName);
+            var isSymbolFileName = patSymbolName.Match(baseNameNoVersionFn);
+            var isUnrealizedGainName = patUnrealizedGains.Match(baseNameNoVersionFn);
+            var isSchwabGroupFileName = patGroup.Match(baseNameNoVersionFn);
+            var isSchwabATR21DayFileName = patAtr21Day.Match(baseNameNoVersionFn);
+            var isSchwabNetLiqPercentFileName = patNetLiqPercent.Match(baseNameNoVersionFn);
+            var isAccountFileName = patAccount.Match(baseNameNoVersionFn);
+            var isDecoratedSymbolFileName = patDecoratedSymbol.Match(baseNameNoVersionFn);
+            //isAccountFileName = new Regex(@$"({patSortOrderPrefix})\s*([a-zA-Z0-9]*)\s*Account(\.csv)?$").Match(baseNameNoVersionFn);
             var result = new AutoInitSortedDictionary<string, string>();
             var count = 0;
             while (csv.Read())
@@ -2391,7 +2499,7 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
                         var note = csv.GetField<string>(isFormulas?"Formulas":"Notes"); // note can contain comment, formulas, or note
                         note = convertPunctuationsToXML(note, patRestoreCommas, ",");
                         note = convertPunctuationsToXML(note, patRestoreNewLines, "&#10;");
-                        if (!fileName.Contains("TRADE"))
+                        if (!baseNameNoVersionFn.Contains("TRADE"))
                             foreach ((var pat, var replace) in patHighLightKeyWord)
                                 /*if (pat.Match(note).Success)*/ note = pat.Replace(note, replace);
                         if (noteDaysOld > 99) noteDaysOld = 99;
@@ -2451,7 +2559,7 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
                             }
                             else
                             {
-                                if (debug1) WriteLine($"""Initial Add skip: {name}Notes[{symbol}][{dateString}]=="{note.Substring(0, Math.Min(note.Length, 20))}" days old ({noteDaysOld})""");
+                                if (debug1) WriteLine($"""Initial Add skipBaseFile: {name}Notes[{symbol}][{dateString}]=="{note.Substring(0, Math.Min(note.Length, 20))}" days old ({noteDaysOld})""");
                                 skip = true;
                             }
                         }
@@ -2463,7 +2571,7 @@ internal class CompareTickerSymbolListsInCSVFilesMainProgram
                         var eventDate = csv.GetField<string>("Event Date");
                         var isNullEventDate = string.IsNullOrEmpty(eventDate);
                         // Some stock files, like "RS Line Blue Dot" have event data and we are only interested in the more recent events.
-                        if (isNullEventDate || ValidEventDate(currentDataFileDateTime, eventDate, maxEventAge)) // Events for today only, skip old events
+                        if (isNullEventDate || ValidEventDate(currentDataFileDateTime, eventDate, maxEventAge)) // Events for today only, skipBaseFile old events
                         {
                             if (defaultValues != null)
                             {                                
